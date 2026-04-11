@@ -6,6 +6,14 @@ const SCANNERS_PER_SCENE = 12;
 const CHANNELS_PER_SCANNER = 16;
 const TOTAL_SCENES = NUM_BANKS * SCENES_PER_BANK; // 240
 const SCANNER_BYTES_PER_SCENE = SCANNERS_PER_SCENE * CHANNELS_PER_SCANNER; // 192
+const SCENE_METADATA_OFFSET = 193;
+const SCENE_DATA_START_OFFSET = 3 * SCENE_RECORD_SIZE;
+const BANK_RECORD_SIZE = SCENES_PER_BANK * SCENE_RECORD_SIZE;
+// Observed scene-area padding in FILE6.PRO: +256 bytes before Bank 7, +128 bytes before Bank 12.
+const BANK_PADDING_SEGMENTS = [
+  { fromBank: 7, bytes: SCENE_RECORD_SIZE },
+  { fromBank: 12, bytes: SCENE_RECORD_SIZE / 2 },
+];
 
 // Channel attribute types (stored in Bank 30, Scene 1)
 const CHANNEL_ATTRIBUTES = {
@@ -71,16 +79,60 @@ let selectedScanners = new Set();
 
 // --- Offset helpers ---
 
+// Recalculate byte 0 (count of non-zero channel bytes) and metadata bitmasks for a scene
+function updateSceneMetadata(sceneIndex) {
+  const blockOffset = getSceneBlockOffset(sceneIndex);
+
+  // Recalculate count byte (byte 0 = number of non-zero bytes in scanner data area)
+  let count = 0;
+  for (let i = 1; i <= SCANNER_BYTES_PER_SCENE; i++) {
+    if (proFileData[blockOffset + i] !== 0) count++;
+  }
+  proFileData[blockOffset] = count;
+
+  // Recalculate per-scanner channel bitmasks in metadata area
+  // Metadata starts at byte 193 of the scene record, odd-indexed bytes are Page A bitmasks.
+  const metaBase = blockOffset + SCENE_METADATA_OFFSET;
+  for (let s = 0; s < SCANNERS_PER_SCENE; s++) {
+    let bitmask = 0;
+    for (let ch = 0; ch < 8; ch++) {
+      const val = proFileData[getSceneChannelOffset(sceneIndex, s, ch)];
+      if (val !== 0) bitmask |= 1 << ch;
+    }
+    proFileData[metaBase + s * 2] = bitmask;
+  }
+}
+
+function getBankPadding(bank) {
+  let padding = 0;
+  for (const segment of BANK_PADDING_SEGMENTS) {
+    if (bank >= segment.fromBank) {
+      padding += segment.bytes;
+    }
+  }
+  return padding;
+}
+
 function getSceneChannelOffset(sceneIndex, scanner, channel) {
+  // Byte 0 of each scene record is a count byte (number of non-zero channel bytes).
+  // Scanner data starts at byte 1.
   return (
-    (3 + sceneIndex) * SCENE_RECORD_SIZE +
+    getSceneBlockOffset(sceneIndex) +
+    1 +
     scanner * CHANNELS_PER_SCANNER +
     channel
   );
 }
 
 function getSceneBlockOffset(sceneIndex) {
-  return (3 + sceneIndex) * SCENE_RECORD_SIZE;
+  const bank = Math.floor(sceneIndex / SCENES_PER_BANK) + 1;
+  const sceneInBank = sceneIndex % SCENES_PER_BANK;
+  return (
+    SCENE_DATA_START_OFFSET +
+    (bank - 1) * BANK_RECORD_SIZE +
+    getBankPadding(bank) +
+    sceneInBank * SCENE_RECORD_SIZE
+  );
 }
 
 // --- Channel mapping helpers ---
@@ -226,12 +278,14 @@ function getSceneData(sceneIndex) {
   const offset = getSceneBlockOffset(sceneIndex);
 
   const scanners = [];
+  // Byte 0 is a count byte; scanner data starts at byte 1
+  const dataStart = offset + 1;
   for (let s = 0; s < SCANNERS_PER_SCENE; s++) {
     scanners.push(
       Array.from(
         proFileData.subarray(
-          offset + s * CHANNELS_PER_SCANNER,
-          offset + (s + 1) * CHANNELS_PER_SCANNER,
+          dataStart + s * CHANNELS_PER_SCANNER,
+          dataStart + (s + 1) * CHANNELS_PER_SCANNER,
         ),
       ),
     );
@@ -623,6 +677,7 @@ function updateChannelValueSlider(scanner, channel, value, sliderElement) {
     });
   }
 
+  updateSceneMetadata(currentSceneIndex);
   clearError();
 }
 
@@ -763,7 +818,7 @@ function clearScene() {
   if (!confirmed) return;
 
   const offset = getSceneBlockOffset(currentSceneIndex);
-  proFileData.fill(0, offset, offset + SCANNER_BYTES_PER_SCENE);
+  proFileData.fill(0, offset, offset + SCENE_RECORD_SIZE);
 
   clearError();
   displayScene();
@@ -783,7 +838,7 @@ function clearBank() {
 
   for (let i = 0; i < SCENES_PER_BANK; i++) {
     const offset = getSceneBlockOffset(firstSceneInBank + i);
-    proFileData.fill(0, offset, offset + SCANNER_BYTES_PER_SCENE);
+    proFileData.fill(0, offset, offset + SCENE_RECORD_SIZE);
   }
 
   clearError();
@@ -793,6 +848,11 @@ function clearBank() {
 
 function downloadFile() {
   if (!proFileData) return;
+
+  // Recalculate all scene metadata (count bytes and bitmasks) before saving
+  for (let i = 0; i < TOTAL_SCENES; i++) {
+    updateSceneMetadata(i);
+  }
 
   const blob = new Blob([proFileData], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
@@ -861,6 +921,7 @@ function applyWheelPreset(scanner, channel, presetIndex) {
     });
   }
 
+  updateSceneMetadata(currentSceneIndex);
   clearError();
 }
 
@@ -988,6 +1049,7 @@ function updatePanTiltFromMouse(event) {
     });
   }
 
+  updateSceneMetadata(currentSceneIndex);
   clearError();
 }
 

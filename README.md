@@ -177,7 +177,7 @@ Offset      Blocks     Size       Description
 0x00000     0          256 B      File header ("succeeded" + padding)
 0x00100     1          256 B      Padding (all zeros)
 0x00200     2          256 B      Filler (all 0xFF)
-0x00300     3–242      61,440 B   Scene data (240 scenes)
+0x00300     3–244      61,824 B   Scene data area (240 scenes + observed padding)
 0x0F300     243–253    2,816 B    Chase / program definitions
 0x0FE00     254        256 B      Controller configuration
 0x0FF00     255        256 B      Validity marker (0x55AA × 10)
@@ -185,27 +185,54 @@ Offset      Blocks     Size       Description
 0x20000     —          512 B      Trailer (all 0xFF)
 ```
 
-### Scene Data (Blocks 3–242)
+### Scene Data (Blocks 3–247)
 
 The controller stores **30 banks × 8 scenes = 240 scenes**. Each scene occupies one 256-byte block.
+
+`FILE6.PRO` does not follow the previously documented fixed filler-block pattern. The scene area is most reliably addressed as **30 bank records × 8 scenes × 256 bytes**, with two observed padding gaps inserted into the bank stream:
+
+- **+256 bytes before Bank 7**
+- **+128 bytes before Bank 12**
 
 **Addressing formula:**
 
 ```
-block_index = 3 + (bank - 1) × 8 + (scene - 1)
-byte_offset = block_index × 256
+bank_offset = 0x300
+            + (bank - 1) × 0x800
+            + (bank >= 7  ? 0x100 : 0)
+            + (bank >= 12 ? 0x080 : 0)
+
+scene_offset = bank_offset + (scene - 1) × 0x100
 ```
+
+This is the addressing model currently used by the decoder because it matches the observed byte positions in `FILE6.PRO`, including Bank 12 Scene 1 channel data.
 
 **Scene record layout (256 bytes):**
 
 ```
 Offset    Size    Content
 ───────────────────────────────
-0x00      192 B   12 scanners × 16 channels (DMX values 0–255)
-0xC0      64 B    Scene metadata (fade time, speed, scanner enable flags)
+0x00      1 B     Count byte (number of non-zero channel bytes in scanner data)
+0x01      192 B   12 scanners × 16 channels (DMX values 0–255)
+0xC1      63 B    Scene metadata (per-scanner channel bitmasks, fade time, speed)
 ```
 
-Each scanner row is 16 bytes — one byte per DMX channel. The physical faders on the controller access channels 1–8 (Page A) or 9–16 (Page B) via a page select button; in the file all 16 are stored sequentially.
+The first byte of each scene record is a count byte that holds the number of non-zero DMX channel values in the scanner data area (bytes 1–192). This is used by the controller firmware for fast empty-scene detection and integrity checking.
+
+Each scanner row stores 16 bytes, one byte per DMX channel. The physical controller exposes channels 1–8 on Page A and 9–16 on Page B, but the file stores all 16 sequentially.
+
+**Scene metadata area (bytes 0xC1–0xFF, 63 bytes):**
+
+The metadata area contains per-scanner channel enable bitmasks at odd-indexed positions:
+
+```
+Byte 0xC1 (193): Scanner 1 Page A bitmask (bit 0 = CH1, bit 7 = CH8)
+Byte 0xC3 (195): Scanner 2 Page A bitmask
+...
+Byte 0xD7 (215): Scanner 12 Page A bitmask
+```
+
+A set bit indicates the corresponding channel was programmed (has a recorded value) in this scene.
 
 ### Default DMX Address Mapping
 
@@ -241,4 +268,5 @@ See [PRO_FILE_FORMAT.md](PRO_FILE_FORMAT.md) for the complete reverse-engineered
 ## License
 
 This project is based on independent reverse engineering of the Showlite DMX Master Pro USB EEPROM format. It is not affiliated with or endorsed by the manufacturer.
+
 # Showlite-DMX-Master-Pro---Scene-Editor
