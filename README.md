@@ -1,5 +1,7 @@
 # Showlite DMX Master Pro USB — Scene Editor & File Decoder
 
+**[Try it online](https://calkoe.github.io/Showlite-DMX-Master-Pro---Scene-Editor/)** — no installation required.
+
 A browser-based scene editor for the **Showlite DMX Master Pro USB** lighting controller. Load, edit, and save `.PRO` files directly in your browser — no software installation required.
 
 The `.PRO` file format was fully reverse-engineered from raw EEPROM dumps. This project documents the binary format and provides tools to view and modify scene data, channel configurations, fixture calibration, and gobo/color wheel presets outside the physical controller.
@@ -172,6 +174,52 @@ The dropdown automatically detects which preset matches the current value. Chang
 5. Once complete, all scenes, chases, and settings from the file are active on the controller
 
 > **Important:** The file must be exactly **131,584 bytes**. The editor preserves this size automatically. Use a FAT32-formatted USB drive for best compatibility.
+
+---
+
+## MCP Server — AI Agent Integration
+
+The `mcp-server/` directory contains a **Model Context Protocol** server that lets AI agents (VS Code Copilot, Claude Desktop, etc.) read and write `.PRO` files directly on disk.
+
+### Setup
+
+```bash
+cd mcp-server
+npm install
+```
+
+### Register with your AI client
+
+Add to your MCP client config (e.g. VS Code `settings.json` or Claude Desktop `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "showlite-pro": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-server/server.js"]
+    }
+  }
+}
+```
+
+### Available Tools
+
+| Tool                 | Description                                                                      |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `load_file`          | Load a `.PRO` file into memory (auto-finds one in project root if no path given) |
+| `save_file`          | Save the in-memory data back to disk                                             |
+| `list_scenes`        | List all non-empty scenes in a bank or across all 30 banks                       |
+| `get_scene`          | Read all channel values for a scene with human-readable attribute names          |
+| `get_channel_config` | Show channel attribute mappings (PAN, TILT, RGB, etc.) for all scanners          |
+| `set_channel`        | Set a single DMX channel value (0-255) — auto-saves                              |
+| `set_color`          | Set RGB(W) + dimmer for a scanner — auto-saves                                   |
+| `set_position`       | Set pan/tilt in degrees (-90° to +90°) using calibration — auto-saves            |
+| `set_scanner_batch`  | Set multiple channels at once via a JSON map — auto-saves                        |
+| `copy_scanner`       | Copy all channels from one scanner to another — auto-saves                       |
+| `clear_scene`        | Zero out an entire scene — auto-saves                                            |
+
+The server reuses the exact same binary-format code (`constants.js`, `pro-format.js`, `color-utils.js`) as the web editor — zero duplicated logic.
 
 ---
 

@@ -586,3 +586,13 @@ function toggleDimmer(scanner) {
   updateSceneMetadata(currentSceneIndex);
   clearError();
 }
+
+function toggleChannel(scanner, channel) {
+  if (!proFileData) return;
+
+  const currentValue =
+    proFileData[getSceneChannelOffset(currentSceneIndex, scanner, channel)];
+  const newValue = currentValue > 0 ? 0 : 255;
+
+  updateChannelValueSlider(scanner, channel, newValue, null);
+}

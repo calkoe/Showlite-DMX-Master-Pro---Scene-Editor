@@ -208,6 +208,17 @@ function downloadFile() {
 
 // --- Scanner copy/paste ---
 
+function flashScannerRow(scanner) {
+  const row = document.getElementById(`scanner-row-${scanner}`);
+  if (!row) return;
+  row.classList.remove("flash");
+  void row.offsetWidth; // force reflow to restart animation
+  row.classList.add("flash");
+  row.addEventListener("animationend", () => row.classList.remove("flash"), {
+    once: true,
+  });
+}
+
 function copyScanner(scanner) {
   if (!proFileData) return;
 
@@ -215,6 +226,7 @@ function copyScanner(scanner) {
   if (!sceneData) return;
 
   scannerClipboard = [...sceneData.scanners[scanner]];
+  flashScannerRow(scanner);
 }
 
 function pasteScanner(scanner) {
@@ -232,6 +244,7 @@ function pasteScanner(scanner) {
 
   updateSceneMetadata(currentSceneIndex);
   displayScene();
+  flashScannerRow(scanner);
 }
 
 function fillForwardScanner(scanner) {
@@ -255,6 +268,7 @@ function fillForwardScanner(scanner) {
   }
 
   displayScene();
+  flashScannerRow(scanner);
 }
 
 // --- Display settings ---

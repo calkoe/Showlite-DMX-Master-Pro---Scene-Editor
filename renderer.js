@@ -19,7 +19,7 @@ function renderScannerHeaderCell(s, isSelected, dimmerStyle) {
 function renderSliderCell(s, ch, value, mapping, stepSize, presetLabel) {
   const activeClass = value > 0 ? "active" : "";
   const percentage = (value / 255) * 100;
-  return `<td title="${mapping.label}: ${value}">
+  return `<td title="${mapping.label}: ${value}" ondblclick="toggleChannel(${s}, ${ch})">
     <div class="slider-container">
       <span class="slider-value ${activeClass}" id="val-${s}-${ch}">${value}</span>
       <div style="font-size: 0.6em; color: ${mapping.color}; margin-bottom: 2px;">${mapping.label}</div>${presetLabel}
@@ -45,7 +45,7 @@ function renderWheelCell(s, ch, value, mapping) {
   for (let p = 1; p <= 7; p++) {
     options += `<option value="${p}" ${selectedPreset === p ? "selected" : ""}>#${p}</option>`;
   }
-  return `<td title="${mapping.label}: ${value}">
+  return `<td title="${mapping.label}: ${value}" ondblclick="toggleChannel(${s}, ${ch})">
     <div class="slider-container">
       <span class="slider-value ${activeClass}" id="val-${s}-${ch}">${value}</span>
       <div style="font-size: 0.6em; color: ${mapping.color}; margin-bottom: 2px;">${mapping.label}</div>
@@ -263,10 +263,8 @@ function displayScene() {
     html += `<th class="channel-label" title="${attr.label}">CH ${ch + 1}</th>`;
   }
 
-  html +=
-    '<th class="channel-label">Pan/Tilt<br><span style="font-size: 0.65em; color: #9d4eff;">2D Pad</span></th>';
-  html +=
-    '<th class="channel-label">Color<br><span style="font-size: 0.65em; color: #ff4444;">RGBW</span></th>';
+  html += '<th class="channel-label">Pan/Tilt</th>';
+  html += '<th class="channel-label">Color</th>';
   html +=
     '<th class="channel-label" style="width: 10px; padding: 2px;">💡</th>';
   html += "</tr>";
@@ -280,7 +278,7 @@ function displayScene() {
     const isCalibScene = isCalibration;
     const presetNumber = isCalibScene ? sceneData.sceneInBank - 1 : 0;
 
-    html += "<tr>";
+    html += `<tr id="scanner-row-${s}">`;
     html += renderScannerHeaderCell(s, isSelected, dimmerStyle);
 
     for (let ch = 0; ch < displayedChannels; ch++) {
