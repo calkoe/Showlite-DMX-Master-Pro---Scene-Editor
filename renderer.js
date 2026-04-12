@@ -5,8 +5,9 @@ function renderGrayscaleStyle(value) {
 }
 
 function renderScannerHeaderCell(s, isSelected, dimmerStyle) {
+  const dmxAddr = s * CHANNELS_PER_SCANNER + 1;
   let html = `<td class="scanner-header ${isSelected ? "selected" : ""}" onclick="toggleScanner(${s})">
-    ${s + 1}
+    ${s + 1}<br><span style="font-size:0.65em;font-weight:normal;color:#888;">Addr <br> ${dmxAddr}</span>
   </td>`;
   html += `<td class="copy-paste-cell">
     <button class="cp-btn" ondblclick="copyScanner(${s})" title="Double-click to copy scanner ${s + 1}">C</button>
@@ -16,17 +17,17 @@ function renderScannerHeaderCell(s, isSelected, dimmerStyle) {
   return html;
 }
 
-function renderSliderCell(s, ch, value, mapping, stepSize, presetLabel) {
+function renderSliderCell(s, ch, value, mapping, presetLabel) {
   const activeClass = value > 0 ? "active" : "";
-  const percentage = (value / 255) * 100;
+  const ratio = value / 255;
   return `<td title="${mapping.label}: ${value}" ondblclick="toggleChannel(${s}, ${ch})">
     <div class="slider-container">
       <span class="slider-value ${activeClass}" id="val-${s}-${ch}">${value}</span>
       <div style="font-size: 0.6em; color: ${mapping.color}; margin-bottom: 2px;">${mapping.label}</div>${presetLabel}
       <input type="range" class="${activeClass}" 
-        min="0" max="255" step="${stepSize}" value="${value}" 
+        min="0" max="255" value="${value}" 
         data-scanner="${s}" data-channel="${ch}"
-        style="--value: ${percentage}%"
+        style="--value: ${ratio}"
         oninput="updateChannelValueSlider(${s}, ${ch}, this.value, this)">
     </div>
   </td>`;
@@ -41,7 +42,7 @@ function renderWheelCell(s, ch, value, mapping) {
       break;
     }
   }
-  let options = `<option value="0" ${selectedPreset === 0 ? "selected" : ""}>Manual</option>`;
+  let options = `<option value="0" ${selectedPreset === 0 ? "selected" : ""}>Default</option>`;
   for (let p = 1; p <= 7; p++) {
     options += `<option value="${p}" ${selectedPreset === p ? "selected" : ""}>#${p}</option>`;
   }
@@ -52,6 +53,29 @@ function renderWheelCell(s, ch, value, mapping) {
       <select class="preset-dropdown ${activeClass}" 
         data-scanner="${s}" data-channel="${ch}"
         onchange="applyWheelPreset(${s}, ${ch}, this.value)">
+        ${options}
+      </select>
+    </div>
+  </td>`;
+}
+
+function renderWledFxCell(s, ch, value, mapping) {
+  const activeClass = value > 0 ? "active" : "";
+  let options = "";
+  const sortedIds = Object.keys(WLED_EFFECTS)
+    .map(Number)
+    .sort((a, b) => a - b);
+  for (const id of sortedIds) {
+    const selected = id === value ? "selected" : "";
+    options += `<option value="${id}" ${selected}>${id} - ${WLED_EFFECTS[id]}</option>`;
+  }
+  return `<td title="${mapping.label}: ${value}" ondblclick="toggleChannel(${s}, ${ch})">
+    <div class="slider-container">
+      <span class="slider-value ${activeClass}" id="val-${s}-${ch}">${value}</span>
+      <div style="font-size: 0.6em; color: ${mapping.color}; margin-bottom: 2px;">${mapping.label}</div>
+      <select class="wled-fx-dropdown ${activeClass}"
+        data-scanner="${s}" data-channel="${ch}"
+        onchange="updateChannelValueSlider(${s}, ${ch}, parseInt(this.value), this)">
         ${options}
       </select>
     </div>
@@ -249,8 +273,6 @@ function displayScene() {
     html += "</div>";
   }
 
-  const stepSize = sceneData.bank === 30 ? 1 : 51;
-
   // Table header
   html += "<table>";
   html +=
@@ -312,8 +334,10 @@ function displayScene() {
 
       if (!isCalibScene && isWheelChannel(s, ch)) {
         html += renderWheelCell(s, ch, value, mapping);
+      } else if (!isCalibScene && mapping.name === "WLED_FX_ID") {
+        html += renderWledFxCell(s, ch, value, mapping);
       } else {
-        html += renderSliderCell(s, ch, value, mapping, stepSize, presetLabel);
+        html += renderSliderCell(s, ch, value, mapping, presetLabel);
       }
     }
 

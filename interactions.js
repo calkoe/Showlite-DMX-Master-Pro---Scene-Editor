@@ -20,8 +20,17 @@ function updateSliderDisplay(scanner, channel, value, sliderElement) {
     );
   if (el) {
     el.value = value;
-    el.style.setProperty("--value", `${(value / 255) * 100}%`);
+    el.style.setProperty("--value", value / 255);
     el.className = value > 0 ? "active" : "";
+  }
+
+  // Also update WLED FX dropdown if present
+  const dropdown = document.querySelector(
+    `select.wled-fx-dropdown[data-scanner="${scanner}"][data-channel="${channel}"]`,
+  );
+  if (dropdown) {
+    dropdown.value = value;
+    dropdown.className = `wled-fx-dropdown ${value > 0 ? "active" : ""}`;
   }
 }
 
@@ -270,7 +279,7 @@ function updateChannelAttribute(scanner, channel, attributeId) {
   if (!proFileData) return;
 
   const attrId = parseInt(attributeId);
-  if (isNaN(attrId) || attrId < 0 || attrId > 13) {
+  if (isNaN(attrId) || !CHANNEL_ATTRIBUTES.hasOwnProperty(attrId)) {
     showError("Invalid attribute ID");
     displayScene();
     return;
@@ -492,7 +501,11 @@ function applyWheelPreset(scanner, channel, presetIndex) {
 
   const preset = parseInt(presetIndex);
   if (preset === 0) {
-    displayScene();
+    // Default: set channel to 0
+    proFileData[getSceneChannelOffset(currentSceneIndex, scanner, channel)] = 0;
+    updateSliderDisplay(scanner, channel, 0, null);
+    syncToSelectedScanners(scanner, channel, 0);
+    updateSceneMetadata(currentSceneIndex);
     return;
   }
 
@@ -502,7 +515,6 @@ function applyWheelPreset(scanner, channel, presetIndex) {
     showError(
       `⚠️ Preset ${preset} has no calibration data for Scanner ${scanner + 1} CH${channel + 1}. Set values in Bank 30, Scene ${preset + 1} first.`,
     );
-    setTimeout(clearError, 4000);
   }
 
   proFileData[getSceneChannelOffset(currentSceneIndex, scanner, channel)] =
@@ -570,7 +582,6 @@ function toggleDimmer(scanner) {
   const dimmerCh = getDimmerChannel(scanner);
   if (dimmerCh < 0) {
     showError(`⚠️ Scanner ${scanner + 1} has no dimmer channel configured`);
-    setTimeout(clearError, 2000);
     return;
   }
 

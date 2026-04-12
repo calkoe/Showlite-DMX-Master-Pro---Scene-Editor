@@ -95,28 +95,6 @@ server.prompt(
 - **Bank 30** is reserved for configuration — do NOT write creative scenes there.
 - Banks 1–29 (232 scenes) are available for lighting scenes.
 
-## Channel Attributes
-Each scanner's channels can be assigned a function via the channel config (Bank 30 Scene 1):
-| ID | Name | What it does |
-|----|------|-------------|
-| 0 | NONE | Unassigned / generic |
-| 1 | PAN | Horizontal movement |
-| 2 | PAN_FINE | Pan 16-bit precision |
-| 3 | TILT | Vertical movement |
-| 4 | TILT_FINE | Tilt 16-bit precision |
-| 5 | DIMMER | Master brightness (0=off, 255=full) |
-| 6 | RED | Red color component |
-| 7 | GREEN | Green color component |
-| 8 | BLUE | Blue color component |
-| 9 | WHITE | White/amber component |
-| 10 | COLOR_WHEEL | Color wheel position |
-| 11 | GOBO_WHEEL | Gobo pattern wheel |
-| 12 | STROBE | Strobe speed/effect |
-| 13 | SPEED | Movement speed |
-
-## Calibration (Pan/Tilt)
-Pan and Tilt use 3-point calibration (Bank 30 Scenes 2–4) mapping -90° / 0° / +90° to DMX values. Use the \`set_position\` tool to work in degrees — it handles conversion automatically.
-
 ## Your Workflow — ALWAYS do this first:
 1. Call \`load_file\` to load the .PRO file.
 2. Call \`get_channel_config\` to see what channels are assigned for each scanner.

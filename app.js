@@ -14,12 +14,20 @@ const controlsBar = document.getElementById("controlsBar");
 
 // --- Error handling ---
 
+let errorTimeoutId = null;
+
 function showError(message) {
   errorDiv.innerHTML = `<div class="error">${message}</div>`;
+  if (errorTimeoutId) clearTimeout(errorTimeoutId);
+  errorTimeoutId = setTimeout(clearError, 3000);
 }
 
 function clearError() {
   errorDiv.innerHTML = "";
+  if (errorTimeoutId) {
+    clearTimeout(errorTimeoutId);
+    errorTimeoutId = null;
+  }
 }
 
 // --- File handling ---
@@ -233,7 +241,6 @@ function pasteScanner(scanner) {
   if (!proFileData) return;
   if (!scannerClipboard) {
     showError("⚠️ Clipboard is empty. Copy a scanner first.");
-    setTimeout(clearError, 2000);
     return;
   }
 
@@ -277,7 +284,6 @@ function updateChannelDisplay(count) {
   const num = parseInt(count);
   if (isNaN(num) || num < 1 || num > 16) {
     showError("Channel count must be between 1 and 16");
-    setTimeout(clearError, 2000);
     return;
   }
   displayedChannels = num;

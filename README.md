@@ -89,22 +89,27 @@ Bank 30, Scene 1 is a **special configuration scene** that defines what each cha
 1. Click **"⚙️ Enter Channel Config"** in the toolbar
 2. For each scanner, use the dropdown on every channel to assign its function:
 
-| ID  | Attribute   | Description                    |
-| --- | ----------- | ------------------------------ |
-| 0   | NONE        | Not assigned / generic channel |
-| 1   | PAN         | Pan (horizontal movement)      |
-| 2   | PAN_FINE    | Pan fine (16-bit precision)    |
-| 3   | TILT        | Tilt (vertical movement)       |
-| 4   | TILT_FINE   | Tilt fine (16-bit precision)   |
-| 5   | DIMMER      | Master brightness              |
-| 6   | RED         | Red color component            |
-| 7   | GREEN       | Green color component          |
-| 8   | BLUE        | Blue color component           |
-| 9   | WHITE       | White/amber component          |
-| 10  | COLOR_WHEEL | Color wheel position           |
-| 11  | GOBO_WHEEL  | Gobo pattern wheel position    |
-| 12  | STROBE      | Strobe speed/effect            |
-| 13  | SPEED       | Movement speed                 |
+| ID  | Attribute     | Description                      |
+| --- | ------------- | -------------------------------- |
+| 0   | NONE          | Not assigned / generic channel   |
+| 1   | PAN           | Pan (horizontal movement)        |
+| 2   | PAN_FINE      | Pan fine (16-bit precision)      |
+| 3   | TILT          | Tilt (vertical movement)         |
+| 4   | TILT_FINE     | Tilt fine (16-bit precision)     |
+| 5   | DIMMER        | Master brightness                |
+| 6   | RED           | Red color component              |
+| 7   | GREEN         | Green color component            |
+| 8   | BLUE          | Blue color component             |
+| 9   | WHITE         | White/amber component            |
+| 10  | COLOR_WHEEL   | Color wheel position             |
+| 11  | GOBO_WHEEL    | Gobo pattern wheel position      |
+| 12  | STROBE        | Strobe speed/effect              |
+| 13  | SPEED         | Movement speed                   |
+| 14  | WLED_FX_ID    | WLED effect selection (dropdown) |
+| 15  | WLED_FX_SPEED | WLED effect speed                |
+| 16  | WLED_FX_INT   | WLED effect intensity            |
+| 17  | WLED_FX_PALT  | WLED palette selection           |
+| 18  | WLED_FX_OPT   | WLED effect option               |
 
 3. The mappings apply immediately to all other scenes in the editor
 
@@ -148,10 +153,58 @@ All 7 scenes double as **preset storage** for gobo and color wheel channels:
 
 In Banks 1–29, Gobo and Color Wheel channels display a **dropdown menu** instead of a slider:
 
-- **Manual**: Use any custom DMX value
+- **Default**: Sets the channel to 0 (off/default position)
 - **Preset 1–7**: Instantly load the DMX value stored in Bank 30, Scenes 2–8
 
 The dropdown automatically detects which preset matches the current value. Changing a calibration value in Bank 30 updates all scenes that reference that preset.
+
+---
+
+## Live DMX Output
+
+The editor can send DMX data directly to connected fixtures via a USB-to-DMX interface using the **Web Serial API** (Chrome/Edge only).
+
+### Supported Interfaces
+
+- **Raw USB-to-RS485** (default): Cheap adapters that pass serial bytes directly to the DMX bus. Uses 250000 baud, 8N2, with BREAK signal timing.
+- **ENTTEC DMX USB Pro**: Professional interface using framed packets at 57600 baud.
+
+Click the **📡 Raw RS485 / ENTTEC Pro** button to toggle between modes.
+
+### Usage
+
+1. Click **"▶️ DMX Output"** to open the browser serial port picker
+2. Select your USB-DMX adapter
+3. The editor continuously sends the current scene's channel data at 20 Hz
+4. Slider changes are reflected in real-time on connected fixtures
+5. Click **"🔴 DMX Stop"** to disconnect
+
+> **Note:** Web Serial requires Chrome or Edge. The serial port prompt requires a user gesture (the button click).
+
+---
+
+## Operator Mode
+
+The **Operator** auto-steps through scenes in the current bank with configurable timing and smooth DMX crossfades.
+
+### Controls
+
+Click **"🎬 Operator"** in the toolbar to toggle the operator panel. It displays inline with:
+
+- **Step Time** (0.1–20s): Time between scene transitions
+- **Fade Time** (0.1–20s): Duration of the DMX crossfade between scenes. Automatically clamped to not exceed Step Time.
+- **Start / Stop** buttons and a status indicator showing the current bank/scene
+
+### Crossfade Behavior
+
+- All DMX channel values are **linearly interpolated** between the previous and next scene over the fade duration
+- **Gobo Wheel**, **Color Wheel**, and **WLED FX ID** channels are excluded from fading — they snap instantly to avoid garbage intermediate values
+- The operator cycles through scenes 1–8 within the current bank, wrapping back to scene 1
+- The scene display updates as scenes advance
+
+### DMX Output Integration
+
+When the operator is running and DMX output is active, the USB interface sends the interpolated fade values in real-time. This means connected fixtures smoothly transition between scenes.
 
 ---
 

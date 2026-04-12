@@ -252,8 +252,8 @@ input[type="range"].active {
   background: linear-gradient(
     to right,
     #1a4d2e 0%,
-    #1a4d2e var(--value),
-    #3a3a3a var(--value),
+    #1a4d2e calc(var(--value) * (100% - 14px) + 7px),
+    #3a3a3a calc(var(--value) * (100% - 14px) + 7px),
     #3a3a3a 100%
   );
 }
@@ -287,6 +287,43 @@ input[type="range"].active::-moz-range-thumb {
 
 .action-buttons button:hover {
   background: #4a4a4a;
+}
+
+.dmx-btn {
+  background: #2a6e2a !important;
+  border-color: #3a8e3a !important;
+  color: #fff !important;
+}
+
+.dmx-btn:hover {
+  background: #3a8e3a !important;
+}
+
+.dmx-btn.dmx-active {
+  background: #cc3333 !important;
+  border-color: #ee4444 !important;
+  animation: dmx-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dmx-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.dmx-mode-btn {
+  background: #3a3a5a !important;
+  border-color: #5a5a8a !important;
+  color: #aac !important;
+  font-size: 0.7em !important;
+}
+
+.dmx-mode-btn:hover {
+  background: #4a4a6a !important;
 }
 
 .action-buttons button.primary {
@@ -435,6 +472,34 @@ input[type="range"].active::-moz-range-thumb {
   background: #1a4d2e;
   color: #4ade80;
   border-color: #4ade80;
+}
+
+.wled-fx-dropdown {
+  width: 100%;
+  padding: 4px;
+  background: #3a3a3a;
+  color: #e0e0e0;
+  border: 1px solid #4a4a4a;
+  border-radius: 3px;
+  font-size: 0.7em;
+  cursor: pointer;
+  text-align: left;
+  max-width: 90px;
+}
+
+.wled-fx-dropdown:hover {
+  border-color: #ff6ec7;
+}
+
+.wled-fx-dropdown:focus {
+  outline: 2px solid #ff6ec7;
+  border-color: #ff6ec7;
+}
+
+.wled-fx-dropdown.active {
+  background: #4d1a3a;
+  color: #ff6ec7;
+  border-color: #ff6ec7;
 }
 
 /* Scene navigation bar */
@@ -685,4 +750,86 @@ tr.flash > td {
 
 .white-slider.active::-moz-range-thumb {
   background: #4ade80;
+}
+
+/* Operator Panel */
+.operator-toggle-btn {
+  background: #3a3a5a !important;
+  border-color: #5a5a8a !important;
+  color: #aac !important;
+}
+
+.operator-toggle-btn:hover {
+  background: #4a4a6a !important;
+}
+
+.operator-toggle-btn.operator-active {
+  background: #4a2a6a !important;
+  border-color: #8a5abf !important;
+  color: #d4aaff !important;
+}
+
+.operator-panel {
+  background: #2a2a3a;
+  border: 1px solid #4a4a6a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 10px;
+}
+
+.operator-header {
+  font-weight: 700;
+  font-size: 0.85em;
+  color: #d4aaff;
+  margin-right: 8px;
+}
+
+.operator-body {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.operator-body label {
+  font-size: 0.8em;
+  color: #aaa;
+}
+
+.operator-body input[type="range"] {
+  width: 140px;
+}
+
+.operator-val {
+  font-family: "Courier New", monospace;
+  font-size: 0.8em;
+  color: #d4aaff;
+  min-width: 35px;
+}
+
+.operator-body button {
+  padding: 5px 12px;
+  border: 1px solid #4a4a6a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #e0e0e0;
+  background: #3a3a5a;
+}
+
+.operator-body button:hover:not(:disabled) {
+  background: #4a4a6a;
+}
+
+.operator-body button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.operator-status {
+  font-size: 0.8em;
+  font-weight: 600;
+  margin-left: 4px;
 }
