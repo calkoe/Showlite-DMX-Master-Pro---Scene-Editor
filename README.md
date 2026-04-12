@@ -59,6 +59,14 @@ The pad displays degree tick marks at **-90°**, **0°**, and **+90°** on both 
 - **Copy Scene**: Enter a source and destination scene number (1–240) and click Copy
 - **Copy Bank**: Enter a source and destination bank number (1–30) to copy all 8 scenes at once
 
+### Per-Scanner Copy / Paste / Fill Forward
+
+Each scanner row has three small buttons (requires **double-click** to prevent accidental use):
+
+- **C** — Copy all channel values of this scanner to the clipboard
+- **V** — Paste the clipboard into this scanner (overwrites all channels)
+- **→** — Fill forward: copies this scanner's channel values into all **following scenes** within the same bank (e.g. from Scene 3 to Scenes 4–8). Useful for setting a base position across an entire bank.
+
 ### Clearing Data
 
 - **Clear Scene**: Resets all channel values in the current scene to 0
