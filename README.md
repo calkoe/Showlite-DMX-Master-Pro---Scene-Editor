@@ -1,4 +1,7 @@
-# Showlite DMX Master Pro USB — Scene Editor & File Decoder
+# Showlite DMX Master Pro USB — Scene Editor & Standalone Operator
+
+![Screenshot 1](screenshot1.png)
+![Screenshot 2](screenshot2.png)
 
 **[Try it online](https://calkoe.github.io/Showlite-DMX-Master-Pro---Scene-Editor/)** — no installation required.
 
