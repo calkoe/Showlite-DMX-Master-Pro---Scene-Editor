@@ -35,7 +35,17 @@ The `.PRO` file format was fully reverse-engineered from raw EEPROM dumps. This 
 
 ### 2D Pan/Tilt Pad
 
-For scanners with Pan and Tilt channels configured, a **2D control pad** appears in the rightmost column. Click and drag to set both Pan and Tilt simultaneously. The pad expands on hover for higher precision.
+For scanners with Pan and Tilt channels configured, a **2D control pad** appears in the scene table. Click and drag to position the fixture in a **-90° to +90°** range for both Pan (horizontal axis) and Tilt (vertical axis). The pad expands on hover for higher precision.
+
+The pad uses the **3-point calibration** stored in Bank 30, Scenes 2–4 to translate degree positions into the correct DMX values for each scanner. This means:
+
+- **-90°** maps to the DMX value recorded in Scene 2 (hard left / full down)
+- **0°** maps to the DMX value recorded in Scene 3 (center / level)
+- **+90°** maps to the DMX value recorded in Scene 4 (hard right / full up)
+
+Between calibration points, DMX values are linearly interpolated. Each scanner uses its own calibration, so fixtures with different DMX ranges are handled correctly.
+
+The pad displays degree tick marks at **-90°**, **0°**, and **+90°** on both axes, and a live readout showing the current Pan and Tilt position in degrees (e.g. `P:45° T:-30°`).
 
 ### Synchronized Scanner Control
 
@@ -107,6 +117,8 @@ These scenes let you record the DMX values for specific physical angles:
 | 4     | +90°  | Hard right / full up  |
 
 Adjust the Pan and Tilt sliders until the connected fixture reaches the exact physical position, then save. The editor highlights Pan/Tilt channels with a yellow background and "📍 Calib" label.
+
+Once all three calibration points are set for a scanner, the **2D Pan/Tilt pad** in normal scenes (Banks 1–29) will convert degree positions to DMX values using piecewise linear interpolation between the three reference points. This allows you to position fixtures in degrees regardless of their underlying DMX range.
 
 ### Gobo/Color Wheel Presets (Scenes 2–8)
 
@@ -188,8 +200,6 @@ Offset      Blocks     Size       Description
 ### Scene Data (Blocks 3–247)
 
 The controller stores **30 banks × 8 scenes = 240 scenes**. Each scene occupies one 256-byte block.
-
-`FILE6.PRO` does not follow the previously documented fixed filler-block pattern. The scene area is most reliably addressed as **30 bank records × 8 scenes × 256 bytes**, with two observed padding gaps inserted into the bank stream:
 
 - **+256 bytes before Bank 7**
 - **+128 bytes before Bank 12**

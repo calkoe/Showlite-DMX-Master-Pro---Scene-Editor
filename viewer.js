@@ -163,6 +163,51 @@ function getCalibrationValue(scanner, channel, presetScene) {
   return proFileData[getSceneChannelOffset(calibSceneIndex, scanner, channel)];
 }
 
+// Convert degree (-90 to +90) to DMX value using 3-point calibration
+// Scene 2 = -90°, Scene 3 = 0°, Scene 4 = +90°
+function degreeToDmx(scanner, channel, degree) {
+  const dmxNeg90 = getCalibrationValue(scanner, channel, 2);
+  const dmx0 = getCalibrationValue(scanner, channel, 3);
+  const dmxPos90 = getCalibrationValue(scanner, channel, 4);
+
+  const deg = Math.max(-90, Math.min(90, degree));
+
+  if (deg <= 0) {
+    // Interpolate between -90° and 0°
+    const t = (deg + 90) / 90; // 0 at -90°, 1 at 0°
+    return Math.round(dmxNeg90 + t * (dmx0 - dmxNeg90));
+  } else {
+    // Interpolate between 0° and +90°
+    const t = deg / 90; // 0 at 0°, 1 at +90°
+    return Math.round(dmx0 + t * (dmxPos90 - dmx0));
+  }
+}
+
+// Convert DMX value back to degree (-90 to +90) using 3-point calibration
+function dmxToDegree(scanner, channel, dmxValue) {
+  const dmxNeg90 = getCalibrationValue(scanner, channel, 2);
+  const dmx0 = getCalibrationValue(scanner, channel, 3);
+  const dmxPos90 = getCalibrationValue(scanner, channel, 4);
+
+  // Determine which segment the DMX value falls in
+  // Handle both ascending and descending DMX ranges
+  const inLowerSegment =
+    (dmxNeg90 <= dmx0 && dmxValue <= dmx0) ||
+    (dmxNeg90 >= dmx0 && dmxValue >= dmx0);
+
+  if (inLowerSegment) {
+    const range = dmx0 - dmxNeg90;
+    if (range === 0) return -90;
+    const t = (dmxValue - dmxNeg90) / range; // 0 at -90°, 1 at 0°
+    return -90 + t * 90;
+  } else {
+    const range = dmxPos90 - dmx0;
+    if (range === 0) return 90;
+    const t = (dmxValue - dmx0) / range; // 0 at 0°, 1 at +90°
+    return t * 90;
+  }
+}
+
 function isWheelChannel(scanner, channel) {
   const attrId = getChannelMapping(scanner, channel);
   const attr = CHANNEL_ATTRIBUTES[attrId];
@@ -176,6 +221,26 @@ function getDimmerChannel(scanner) {
     if (attr && attr.name === "DIMMER") return ch;
   }
   return -1;
+}
+
+function getRGBWChannels(scanner) {
+  let red = -1,
+    green = -1,
+    blue = -1,
+    white = -1;
+
+  for (let ch = 0; ch < CHANNELS_PER_SCANNER; ch++) {
+    const attrId = getChannelMapping(scanner, ch);
+    const attr = CHANNEL_ATTRIBUTES[attrId];
+    if (attr) {
+      if (attr.name === "RED") red = ch;
+      else if (attr.name === "GREEN") green = ch;
+      else if (attr.name === "BLUE") blue = ch;
+      else if (attr.name === "WHITE") white = ch;
+    }
+  }
+
+  return { red, green, blue, white };
 }
 
 function getScannerDimmerStyle(scanner, sceneData) {
@@ -197,12 +262,12 @@ function getScannerDimmerStyle(scanner, sceneData) {
 let proFileData = null;
 let currentSceneIndex = 0; // 0-239
 let originalFileName = "modified.PRO";
+let scannerClipboard = null; // Stores copied scanner channel data
+let displayedChannels = 8; // Number of channels to display (default 8, max 16)
 
 // --- DOM elements ---
 
 const fileInput = document.getElementById("fileInput");
-const sceneInfo = document.getElementById("sceneInfo");
-const sceneTitle = document.getElementById("sceneTitle");
 const sceneDisplay = document.getElementById("sceneDisplay");
 const errorDiv = document.getElementById("error");
 const copyControls = document.getElementById("copyControls");
@@ -318,10 +383,14 @@ function renderGrayscaleStyle(value) {
 }
 
 function renderScannerHeaderCell(s, isSelected, dimmerStyle) {
-  return `<td class="scanner-header ${isSelected ? "selected" : ""}" onclick="toggleScanner(${s})">
+  let html = `<td class="scanner-header ${isSelected ? "selected" : ""}" onclick="toggleScanner(${s})">
     ${s + 1}
-  </td>
-  <td id="dimmer-${s}" style="background: ${renderGrayscaleStyle(dimmerStyle.value)}; width: 15px; padding: 2px;" title="Dimmer: ${dimmerStyle.value}"></td>`;
+  </td>`;
+  html += `<td class="copy-paste-cell">
+    <button class="cp-btn" onclick="copyScanner(${s})" title="Copy scanner ${s + 1}">C</button>
+    <button class="cp-btn" onclick="pasteScanner(${s})" title="Paste to scanner ${s + 1}">V</button>
+  </td>`;
+  return html;
 }
 
 function renderSliderCell(s, ch, value, mapping, stepSize, presetLabel) {
@@ -370,9 +439,51 @@ function renderPanTiltPad(s, ptChannels, scanners) {
   if (ptChannels.pan >= 0 && ptChannels.tilt >= 0) {
     const panValue = scanners[s][ptChannels.pan];
     const tiltValue = scanners[s][ptChannels.tilt];
-    const panPercent = (panValue / 255) * 100;
-    const tiltPercent = 100 - (tiltValue / 255) * 100;
+
+    // Convert DMX to degrees using calibration
+    const panDeg = dmxToDegree(s, ptChannels.pan, panValue);
+    const tiltDeg = dmxToDegree(s, ptChannels.tilt, tiltValue);
+
+    // Map degrees (-90..+90) to percent (0..100) for display, clamped to pad bounds
+    const panPercent = Math.max(0, Math.min(100, ((panDeg + 90) / 180) * 100));
+    const tiltPercent = Math.max(
+      0,
+      Math.min(100, 100 - ((tiltDeg + 90) / 180) * 100),
+    );
     const posStyle = `left: ${panPercent}%; top: ${tiltPercent}%;`;
+
+    // Generate position markers for other scenes in the same bank
+    const currentBank = Math.floor(currentSceneIndex / SCENES_PER_BANK);
+    const currentSceneInBank = currentSceneIndex % SCENES_PER_BANK;
+    let otherSceneMarkers = "";
+    for (let si = 0; si < SCENES_PER_BANK; si++) {
+      if (si === currentSceneInBank) continue;
+      const otherSceneIndex = currentBank * SCENES_PER_BANK + si;
+      const otherPan =
+        proFileData[getSceneChannelOffset(otherSceneIndex, s, ptChannels.pan)];
+      const otherTilt =
+        proFileData[getSceneChannelOffset(otherSceneIndex, s, ptChannels.tilt)];
+      if (otherPan === 0 && otherTilt === 0) continue;
+      const oPanDeg = dmxToDegree(s, ptChannels.pan, otherPan);
+      const oTiltDeg = dmxToDegree(s, ptChannels.tilt, otherTilt);
+      const oPanPct = Math.max(0, Math.min(100, ((oPanDeg + 90) / 180) * 100));
+      const oTiltPct = Math.max(
+        0,
+        Math.min(100, 100 - ((oTiltDeg + 90) / 180) * 100),
+      );
+      otherSceneMarkers += `<span style="position:absolute;left:${oPanPct}%;top:${oTiltPct}%;transform:translate(-50%,-50%);font-size:0.55em;color:#666;pointer-events:none;z-index:1;">${si + 1}</span>`;
+    }
+
+    const degreeLabels = `
+      <span class="pantilt-deg-label" style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);font-size:0.55em;color:#888;">Pan</span>
+      <span class="pantilt-deg-label" style="position:absolute;bottom:-12px;left:0;font-size:0.5em;color:#666;">-90°</span>
+      <span class="pantilt-deg-label" style="position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);font-size:0.5em;color:#888;">0°</span>
+      <span class="pantilt-deg-label" style="position:absolute;bottom:-12px;right:0;font-size:0.5em;color:#666;">+90°</span>
+      <span class="pantilt-deg-label" style="position:absolute;left:-18px;top:50%;transform:translateY(-50%) rotate(-90deg);font-size:0.55em;color:#888;">Tilt</span>
+      <span class="pantilt-deg-label" style="position:absolute;right:-16px;top:0;font-size:0.5em;color:#666;">+90°</span>
+      <span class="pantilt-deg-label" style="position:absolute;right:-12px;top:50%;transform:translateY(-50%);font-size:0.5em;color:#888;">0°</span>
+      <span class="pantilt-deg-label" style="position:absolute;right:-16px;bottom:0;font-size:0.5em;color:#666;">-90°</span>`;
+
     const crosshairs = `<div class="pantilt-crosshair"></div><div class="pantilt-crosshair horizontal"></div>`;
     const dragArgs = `${s}, ${ptChannels.pan}, ${ptChannels.tilt}`;
     return `<td class="pantilt-cell">
@@ -382,18 +493,107 @@ function renderPanTiltPad(s, ptChannels, scanners) {
         data-tilt-ch="${ptChannels.tilt}"
         onmousedown="startPanTiltDrag(event, ${dragArgs})">
         ${crosshairs}
-        <div class="pantilt-position" style="${posStyle}"></div>
+        ${otherSceneMarkers}
+        <div class="pantilt-position" id="pantilt-pos-${s}" style="${posStyle}"></div>
+        <div class="pantilt-deg-readout" id="pantilt-deg-${s}" style="position:absolute;bottom:2px;left:2px;font-size:0.5em;color:#4a9eff;pointer-events:none;">P:${panDeg.toFixed(0)}° T:${tiltDeg.toFixed(0)}°</div>
       </div>
       <div class="pantilt-pad-overlay"
         data-scanner="${s}"
         onmousedown="startPanTiltDrag(event, ${dragArgs})">
         ${crosshairs}
-        <div class="pantilt-position" style="${posStyle}"></div>
+        ${degreeLabels}
+        ${otherSceneMarkers}
+        <div class="pantilt-position" id="pantilt-pos-overlay-${s}" style="${posStyle}"></div>
+        <div class="pantilt-deg-readout" id="pantilt-deg-overlay-${s}" style="position:absolute;bottom:4px;left:4px;font-size:0.65em;color:#4ade80;pointer-events:none;">P:${panDeg.toFixed(0)}° T:${tiltDeg.toFixed(0)}°</div>
       </div>
-      <div class="pantilt-label">P:${panValue} T:${tiltValue}</div>
     </td>`;
   }
   return `<td class="pantilt-cell" style="color: #666; font-size: 0.7em;">N/A</td>`;
+}
+
+function renderColorPicker(s, rgbwChannels, scanners) {
+  if (
+    rgbwChannels.red >= 0 &&
+    rgbwChannels.green >= 0 &&
+    rgbwChannels.blue >= 0
+  ) {
+    const r = scanners[s][rgbwChannels.red] || 0;
+    const g = scanners[s][rgbwChannels.green] || 0;
+    const b = scanners[s][rgbwChannels.blue] || 0;
+    const w =
+      rgbwChannels.white >= 0 ? scanners[s][rgbwChannels.white] || 0 : 0;
+
+    const hexColor = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+
+    // Calculate position from RGB values for discrete 16x16 grid
+    const { x, y } = rgbToColorPickerPosition(r, g, b);
+    const posStyle = `left: ${x * 100}%; top: ${y * 100}%;`;
+
+    const dragArgs = `${s}, ${rgbwChannels.red}, ${rgbwChannels.green}, ${rgbwChannels.blue}, ${rgbwChannels.white}`;
+
+    // Generate 10x10 grid of discrete color blocks
+    let gridHtml = "";
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        const hue = (col / 9) * 360;
+        const val = 1 - row / 9;
+        const sat = 1;
+        const c2 = val * sat;
+        const x2 = c2 * (1 - Math.abs(((hue / 60) % 2) - 1));
+        const m2 = val - c2;
+        let cr, cg, cb;
+        if (hue < 60) {
+          cr = c2;
+          cg = x2;
+          cb = 0;
+        } else if (hue < 120) {
+          cr = x2;
+          cg = c2;
+          cb = 0;
+        } else if (hue < 180) {
+          cr = 0;
+          cg = c2;
+          cb = x2;
+        } else if (hue < 240) {
+          cr = 0;
+          cg = x2;
+          cb = c2;
+        } else if (hue < 300) {
+          cr = x2;
+          cg = 0;
+          cb = c2;
+        } else {
+          cr = c2;
+          cg = 0;
+          cb = x2;
+        }
+        const br = Math.round((cr + m2) * 255);
+        const bg2 = Math.round((cg + m2) * 255);
+        const bb = Math.round((cb + m2) * 255);
+        gridHtml += `<div class="color-block" style="background:rgb(${br},${bg2},${bb})"></div>`;
+      }
+    }
+
+    return `<td class="color-picker-cell">
+      <div class="color-picker-pad" 
+        data-scanner="${s}" 
+        data-r-ch="${rgbwChannels.red}" 
+        data-g-ch="${rgbwChannels.green}" 
+        data-b-ch="${rgbwChannels.blue}"
+        data-w-ch="${rgbwChannels.white}"
+        onmousedown="startColorPick(event, ${dragArgs})"
+        style="background: ${hexColor};">
+        <div class="color-preview" style="background: ${hexColor};"></div>
+      </div>
+      <div class="color-picker-overlay"
+        data-scanner="${s}"
+        onmousedown="startColorPick(event, ${dragArgs})">
+        <div class="color-gradient" id="color-gradient-${s}">${gridHtml}</div>
+        <div class="color-position" id="color-position-${s}" style="${posStyle}"></div>
+      </div>
+    </td>`;
+  }
+  return `<td class="color-picker-cell" style="color: #666; font-size: 0.7em;">N/A</td>`;
 }
 
 // --- Display functions ---
@@ -427,13 +627,11 @@ function displayScene() {
 
   const isCalibration = sceneData.bank === 30 && sceneData.sceneInBank >= 2;
 
-  // Apply bank color to scene-info header
-  sceneInfo.style.background = getBankColor(sceneData.bank);
-
   // --- Title ---
+  let titleHtml = "";
   if (isCalibration) {
     const calibInfo = CALIBRATION_SCENES[sceneData.sceneInBank];
-    sceneTitle.innerHTML = `
+    titleHtml = `
       <span style="color: #ff9900;">⚙️ Bank ${sceneData.bank} / Scene ${sceneData.sceneInBank} - ${calibInfo.name}</span>
       <span style="color: #888; font-size: 0.9em; margin-left: 10px;">
           (Scene ${currentSceneIndex + 1} of ${TOTAL_SCENES})
@@ -442,24 +640,22 @@ function displayScene() {
     const emptyIndicator = sceneData.isEmpty
       ? '<span class="empty-indicator">(Empty)</span>'
       : "";
-    sceneTitle.innerHTML = `
+    titleHtml = `
       <span>Bank ${sceneData.bank} / Scene ${sceneData.sceneInBank} ${emptyIndicator}</span>
       <span style="color: #888; font-size: 0.9em; margin-left: 10px;">
           (Scene ${currentSceneIndex + 1} of ${TOTAL_SCENES})
       </span>`;
 
     // Auto-populate copy controls
-    const copyFromSceneInput = document.getElementById("copyFromScene");
-    const copyToSceneInput = document.getElementById("copyToScene");
     const copyFromBankInput = document.getElementById("copyFromBank");
     const copyToBankInput = document.getElementById("copyToBank");
 
-    if (copyToSceneInput) copyToSceneInput.value = currentSceneIndex + 1;
     if (copyToBankInput) copyToBankInput.value = sceneData.bank;
   }
 
   // --- Scene bar + Calibration banner ---
-  let html = renderSceneBar(sceneData.bank, sceneData.sceneInBank);
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 6px 0;"><h2 style="margin:0;font-size:1.1em;">${titleHtml}</h2><span style="color:#888;font-size:0.75em;white-space:nowrap;">← → scenes (1-8) &nbsp;|&nbsp; ↑ ↓ banks</span></div>`;
+  html += renderSceneBar(sceneData.bank, sceneData.sceneInBank);
   if (isCalibration) {
     const calibInfo = CALIBRATION_SCENES[sceneData.sceneInBank];
     html +=
@@ -479,10 +675,10 @@ function displayScene() {
   // --- Table header ---
   html += "<table>";
   html +=
-    '<tr><th class="scanner-header" onclick="toggleAllScanners()" title="Click to select/deselect all">All</th>';
-  html += '<th class="channel-label" style="width: 15px; padding: 2px;"></th>';
+    '<tr><th class="scanner-header" onclick="toggleAllScanners()" title="Click to select/deselect all">#</th>';
+  html += '<th class="channel-label" style="padding: 2px;"></th>';
 
-  for (let ch = 0; ch < CHANNELS_PER_SCANNER; ch++) {
+  for (let ch = 0; ch < displayedChannels; ch++) {
     const attrId = getChannelMapping(0, ch);
     const attr = CHANNEL_ATTRIBUTES[attrId] || CHANNEL_ATTRIBUTES[0];
 
@@ -491,18 +687,23 @@ function displayScene() {
 
   html +=
     '<th class="channel-label">Pan/Tilt<br><span style="font-size: 0.65em; color: #9d4eff;">2D Pad</span></th>';
+  html +=
+    '<th class="channel-label">Color<br><span style="font-size: 0.65em; color: #ff4444;">RGBW</span></th>';
+  html +=
+    '<th class="channel-label" style="width: 10px; padding: 2px;">💡</th>';
   html += "</tr>";
 
   // --- Scanner rows ---
   for (let s = 0; s < SCANNERS_PER_SCENE; s++) {
     const isSelected = selectedScanners.has(s);
     const ptChannels = getPanTiltChannels(s);
+    const rgbwChannels = getRGBWChannels(s);
     const dimmerStyle = getScannerDimmerStyle(s, sceneData);
 
     html += "<tr>";
     html += renderScannerHeaderCell(s, isSelected, dimmerStyle);
 
-    for (let ch = 0; ch < CHANNELS_PER_SCANNER; ch++) {
+    for (let ch = 0; ch < displayedChannels; ch++) {
       const value = sceneData.scanners[s][ch];
       const mappingId = getChannelMapping(s, ch);
       const mapping = CHANNEL_ATTRIBUTES[mappingId] || CHANNEL_ATTRIBUTES[0];
@@ -539,6 +740,8 @@ function displayScene() {
     }
 
     html += renderPanTiltPad(s, ptChannels, sceneData.scanners);
+    html += renderColorPicker(s, rgbwChannels, sceneData.scanners);
+    html += `<td class="dimmer-cell" id="dimmer-${s}" onclick="toggleDimmer(${s})" style="background: ${renderGrayscaleStyle(dimmerStyle.value)};" title="Dimmer: ${dimmerStyle.value} (Click to toggle)"></td>`;
     html += "</tr>";
   }
 
@@ -548,30 +751,29 @@ function displayScene() {
 
 // Display configuration scene (Bank 30, Scene 1) with attribute dropdowns
 function displayConfigScene(sceneData) {
-  sceneInfo.style.background = getBankColor(sceneData.bank);
-
-  sceneTitle.innerHTML = `
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 6px 0;"><h2 style="margin:0;font-size:1.1em;">
     <span style="color: #ff9900;">⚙️ Bank ${sceneData.bank} / Scene ${sceneData.sceneInBank} - CHANNEL CONFIGURATION</span>
     <span style="color: #888; font-size: 0.9em; margin-left: 10px;">
         Define what each channel does for each scanner
     </span>
-  `;
+  </h2><span style="color:#888;font-size:0.75em;white-space:nowrap;">← → scenes (1-8) &nbsp;|&nbsp; ↑ ↓ banks</span></div>`;
 
-  let html =
+  html += renderSceneBar(sceneData.bank, sceneData.sceneInBank);
+
+  html +=
     '<div style="padding: 8px 12px; background: #333; border-radius: 4px; margin-bottom: 10px; color: #ffcc00; font-size: 0.85em;">';
   html +=
     "⚠️ <strong>Configuration Mode:</strong> This scene stores channel attribute mappings. ";
   html +=
     "Set what each channel controls (Pan, Tilt, Dimmer, Color, etc.). These mappings are used when editing other scenes.</div>";
 
-  html += renderSceneBar(sceneData.bank, sceneData.sceneInBank);
-
   html += "<table>";
 
   // Header row - channel numbers
   html +=
     '<tr><th class="scanner-header" onclick="toggleAllScanners()" title="Click to select/deselect all">All</th>';
-  html += '<th class="channel-label" style="width: 15px; padding: 2px;"></th>';
+  html +=
+    '<th class="channel-label" style="width: 30px; padding: 2px;">C/V</th>';
   for (let ch = 0; ch < CHANNELS_PER_SCANNER; ch++) {
     html += `<th class="channel-label" style="min-width: 100px;">CH ${ch + 1}</th>`;
   }
@@ -654,6 +856,96 @@ function updateChannelValueSlider(scanner, channel, value, sliderElement) {
     updateDimmerIndicator(scanner, numValue);
   }
 
+  // Update Pan/Tilt pad if this is a pan or tilt channel
+  const ptChannels = getPanTiltChannels(scanner);
+  if (
+    channel === ptChannels.pan ||
+    channel === ptChannels.tilt ||
+    channel === ptChannels.panFine ||
+    channel === ptChannels.tiltFine
+  ) {
+    const panValue =
+      ptChannels.pan >= 0
+        ? proFileData[
+            getSceneChannelOffset(currentSceneIndex, scanner, ptChannels.pan)
+          ]
+        : 0;
+    const tiltValue =
+      ptChannels.tilt >= 0
+        ? proFileData[
+            getSceneChannelOffset(currentSceneIndex, scanner, ptChannels.tilt)
+          ]
+        : 0;
+    const panDeg = dmxToDegree(scanner, ptChannels.pan, panValue);
+    const tiltDeg = dmxToDegree(scanner, ptChannels.tilt, tiltValue);
+    const xPercent = ((panDeg + 90) / 180) * 100;
+    const yPercent = 100 - ((tiltDeg + 90) / 180) * 100;
+    updateScannerPanTiltDisplay(
+      scanner,
+      ptChannels.pan,
+      ptChannels.tilt,
+      panValue,
+      tiltValue,
+      xPercent,
+      yPercent,
+      panDeg,
+      tiltDeg,
+    );
+  }
+
+  // Update Color picker if this is an RGB channel
+  const rgbwChannels = getRGBWChannels(scanner);
+  if (
+    channel === rgbwChannels.red ||
+    channel === rgbwChannels.green ||
+    channel === rgbwChannels.blue ||
+    channel === rgbwChannels.white
+  ) {
+    const r =
+      rgbwChannels.red >= 0
+        ? proFileData[
+            getSceneChannelOffset(currentSceneIndex, scanner, rgbwChannels.red)
+          ]
+        : 0;
+    const g =
+      rgbwChannels.green >= 0
+        ? proFileData[
+            getSceneChannelOffset(
+              currentSceneIndex,
+              scanner,
+              rgbwChannels.green,
+            )
+          ]
+        : 0;
+    const b =
+      rgbwChannels.blue >= 0
+        ? proFileData[
+            getSceneChannelOffset(currentSceneIndex, scanner, rgbwChannels.blue)
+          ]
+        : 0;
+    const w =
+      rgbwChannels.white >= 0
+        ? proFileData[
+            getSceneChannelOffset(
+              currentSceneIndex,
+              scanner,
+              rgbwChannels.white,
+            )
+          ]
+        : 0;
+    updateScannerColorDisplay(
+      scanner,
+      rgbwChannels.red,
+      rgbwChannels.green,
+      rgbwChannels.blue,
+      rgbwChannels.white,
+      r,
+      g,
+      b,
+      w,
+    );
+  }
+
   // If synchronized mode is active, update all selected scanners
   if (selectedScanners.size > 1 && selectedScanners.has(scanner)) {
     selectedScanners.forEach((s) => {
@@ -672,6 +964,100 @@ function updateChannelValueSlider(scanner, channel, value, sliderElement) {
 
         if (mapping && mapping.name === "DIMMER") {
           updateDimmerIndicator(s, numValue);
+        }
+
+        // Update Pan/Tilt pad for synced scanner
+        const sPtChannels = getPanTiltChannels(s);
+        if (
+          channel === sPtChannels.pan ||
+          channel === sPtChannels.tilt ||
+          channel === sPtChannels.panFine ||
+          channel === sPtChannels.tiltFine
+        ) {
+          const sPanValue =
+            sPtChannels.pan >= 0
+              ? proFileData[
+                  getSceneChannelOffset(currentSceneIndex, s, sPtChannels.pan)
+                ]
+              : 0;
+          const sTiltValue =
+            sPtChannels.tilt >= 0
+              ? proFileData[
+                  getSceneChannelOffset(currentSceneIndex, s, sPtChannels.tilt)
+                ]
+              : 0;
+          const sPanDeg = dmxToDegree(s, sPtChannels.pan, sPanValue);
+          const sTiltDeg = dmxToDegree(s, sPtChannels.tilt, sTiltValue);
+          const sXPercent = ((sPanDeg + 90) / 180) * 100;
+          const sYPercent = 100 - ((sTiltDeg + 90) / 180) * 100;
+          updateScannerPanTiltDisplay(
+            s,
+            sPtChannels.pan,
+            sPtChannels.tilt,
+            sPanValue,
+            sTiltValue,
+            sXPercent,
+            sYPercent,
+            sPanDeg,
+            sTiltDeg,
+          );
+        }
+
+        // Update Color picker for synced scanner
+        const sRgbwChannels = getRGBWChannels(s);
+        if (
+          channel === sRgbwChannels.red ||
+          channel === sRgbwChannels.green ||
+          channel === sRgbwChannels.blue ||
+          channel === sRgbwChannels.white
+        ) {
+          const sR =
+            sRgbwChannels.red >= 0
+              ? proFileData[
+                  getSceneChannelOffset(currentSceneIndex, s, sRgbwChannels.red)
+                ]
+              : 0;
+          const sG =
+            sRgbwChannels.green >= 0
+              ? proFileData[
+                  getSceneChannelOffset(
+                    currentSceneIndex,
+                    s,
+                    sRgbwChannels.green,
+                  )
+                ]
+              : 0;
+          const sB =
+            sRgbwChannels.blue >= 0
+              ? proFileData[
+                  getSceneChannelOffset(
+                    currentSceneIndex,
+                    s,
+                    sRgbwChannels.blue,
+                  )
+                ]
+              : 0;
+          const sW =
+            sRgbwChannels.white >= 0
+              ? proFileData[
+                  getSceneChannelOffset(
+                    currentSceneIndex,
+                    s,
+                    sRgbwChannels.white,
+                  )
+                ]
+              : 0;
+          updateScannerColorDisplay(
+            s,
+            sRgbwChannels.red,
+            sRgbwChannels.green,
+            sRgbwChannels.blue,
+            sRgbwChannels.white,
+            sR,
+            sG,
+            sB,
+            sW,
+          );
         }
       }
     });
@@ -694,6 +1080,7 @@ function updateSliderDisplay(scanner, channel, value, sliderElement) {
       `input[type="range"][data-scanner="${scanner}"][data-channel="${channel}"]`,
     );
   if (el) {
+    el.value = value;
     el.style.setProperty("--value", `${(value / 255) * 100}%`);
     el.className = value > 0 ? "active" : "";
   }
@@ -724,39 +1111,6 @@ function updateChannelAttribute(scanner, channel, attributeId) {
 }
 
 // --- Copy / Clear / Download ---
-
-function copyScene() {
-  if (!proFileData) return;
-
-  const fromScene = parseInt(document.getElementById("copyFromScene").value);
-  const toScene = parseInt(document.getElementById("copyToScene").value);
-
-  if (
-    !fromScene ||
-    !toScene ||
-    fromScene < 1 ||
-    fromScene > 240 ||
-    toScene < 1 ||
-    toScene > 240
-  ) {
-    showError("Please enter valid scene numbers (1-240)");
-    return;
-  }
-
-  const fromOffset = getSceneBlockOffset(fromScene - 1);
-  const toOffset = getSceneBlockOffset(toScene - 1);
-
-  proFileData.set(
-    proFileData.subarray(fromOffset, fromOffset + SCENE_RECORD_SIZE),
-    toOffset,
-  );
-
-  clearError();
-
-  if (currentSceneIndex === toScene - 1) {
-    displayScene();
-  }
-}
 
 function copyBank() {
   if (!proFileData) return;
@@ -791,8 +1145,6 @@ function copyBank() {
   if (currentBank === toBank) {
     displayScene();
   }
-
-  showSuccess(`✅ Bank ${fromBank} (8 scenes) copied to Bank ${toBank}`);
 }
 
 function jumpToScene(sceneIndex) {
@@ -843,7 +1195,6 @@ function clearBank() {
 
   clearError();
   displayScene();
-  showSuccess(`✅ Bank ${currentBank} (all 8 scenes) cleared successfully!`);
 }
 
 function downloadFile() {
@@ -863,8 +1214,6 @@ function downloadFile() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-
-  showSuccess("✅ File downloaded successfully!");
 }
 
 // --- Wheel presets ---
@@ -967,28 +1316,36 @@ function updateScannerPanTiltDisplay(
   tiltValue,
   xPercent,
   yPercent,
+  panDeg,
+  tiltDeg,
 ) {
-  // Update both the small pad and the hover overlay
-  const pads = document.querySelectorAll(
-    `.pantilt-pad[data-scanner="${s}"], .pantilt-pad-overlay[data-scanner="${s}"]`,
-  );
-  pads.forEach((pad) => {
-    const position = pad.querySelector(".pantilt-position");
-    if (position) {
-      position.style.left = `${xPercent}%`;
-      position.style.top = `${yPercent}%`;
-    }
-  });
+  // Update position indicators by ID
+  const posSmall = document.getElementById(`pantilt-pos-${s}`);
+  if (posSmall) {
+    posSmall.style.left = `${xPercent}%`;
+    posSmall.style.top = `${yPercent}%`;
+  }
 
-  // Update the label (sibling after the overlay)
-  const overlay = document.querySelector(
-    `.pantilt-pad-overlay[data-scanner="${s}"]`,
-  );
-  if (overlay) {
-    const label = overlay.nextElementSibling;
-    if (label && label.classList.contains("pantilt-label")) {
-      label.textContent = `P:${panValue} T:${tiltValue}`;
-    }
+  const posOverlay = document.getElementById(`pantilt-pos-overlay-${s}`);
+  if (posOverlay) {
+    posOverlay.style.left = `${xPercent}%`;
+    posOverlay.style.top = `${yPercent}%`;
+  }
+
+  // Update degree readouts
+  if (panDeg !== undefined && tiltDeg !== undefined) {
+    const degSmall = document.getElementById(`pantilt-deg-${s}`);
+    if (degSmall)
+      degSmall.textContent = `P:${Math.round(panDeg)}° T:${Math.round(tiltDeg)}°`;
+    const degOverlay = document.getElementById(`pantilt-deg-overlay-${s}`);
+    if (degOverlay)
+      degOverlay.textContent = `P:${Math.round(panDeg)}° T:${Math.round(tiltDeg)}°`;
+  }
+
+  // Update the label
+  const label = document.getElementById(`pantilt-label-${s}`);
+  if (label) {
+    label.textContent = `P:${panValue} T:${tiltValue}`;
   }
 
   updateSliderDisplay(s, panChannel, panValue, null);
@@ -1006,8 +1363,14 @@ function updatePanTiltFromMouse(event) {
   x = Math.max(0, Math.min(1, x));
   y = Math.max(0, Math.min(1, y));
 
-  const panValue = Math.round(x * 255);
-  const tiltValue = Math.round((1 - y) * 255);
+  // Convert mouse position to degrees: x: 0=left=-90°, 1=right=+90°; y: 0=top=+90°, 1=bottom=-90°
+  const panDeg = -90 + x * 180;
+  const tiltDeg = 90 - y * 180;
+
+  // Convert degrees to DMX using 3-point calibration
+  const panValue = degreeToDmx(scanner, panChannel, panDeg);
+  const tiltValue = degreeToDmx(scanner, tiltChannel, tiltDeg);
+
   const xPercent = x * 100;
   const yPercent = y * 100;
 
@@ -1026,24 +1389,31 @@ function updatePanTiltFromMouse(event) {
     tiltValue,
     xPercent,
     yPercent,
+    panDeg,
+    tiltDeg,
   );
 
   // Sync to selected scanners
   if (selectedScanners.size > 1 && selectedScanners.has(scanner)) {
     selectedScanners.forEach((s) => {
       if (s !== scanner) {
+        // Each scanner may have different calibration, so convert degrees to DMX per scanner
+        const sPanValue = degreeToDmx(s, panChannel, panDeg);
+        const sTiltValue = degreeToDmx(s, tiltChannel, tiltDeg);
         proFileData[getSceneChannelOffset(currentSceneIndex, s, panChannel)] =
-          panValue;
+          sPanValue;
         proFileData[getSceneChannelOffset(currentSceneIndex, s, tiltChannel)] =
-          tiltValue;
+          sTiltValue;
         updateScannerPanTiltDisplay(
           s,
           panChannel,
           tiltChannel,
-          panValue,
-          tiltValue,
+          sPanValue,
+          sTiltValue,
           xPercent,
           yPercent,
+          panDeg,
+          tiltDeg,
         );
       }
     });
@@ -1066,4 +1436,312 @@ function showSuccess(message) {
 
 function clearError() {
   errorDiv.innerHTML = "";
+}
+
+// --- Copy/Paste functions ---
+
+function copyScanner(scanner) {
+  if (!proFileData) return;
+
+  const sceneData = getSceneData(currentSceneIndex);
+  if (!sceneData) return;
+
+  scannerClipboard = [...sceneData.scanners[scanner]];
+}
+
+function pasteScanner(scanner) {
+  if (!proFileData) return;
+  if (!scannerClipboard) {
+    showError("⚠️ Clipboard is empty. Copy a scanner first.");
+    setTimeout(clearError, 2000);
+    return;
+  }
+
+  // Paste all 16 channels from clipboard
+  for (let ch = 0; ch < CHANNELS_PER_SCANNER; ch++) {
+    proFileData[getSceneChannelOffset(currentSceneIndex, scanner, ch)] =
+      scannerClipboard[ch];
+  }
+
+  updateSceneMetadata(currentSceneIndex);
+  displayScene();
+}
+
+// --- Color picker functions ---
+
+let colorPickerDragging = false;
+let currentColorData = null;
+
+function startColorPick(
+  event,
+  scanner,
+  rChannel,
+  gChannel,
+  bChannel,
+  wChannel,
+) {
+  event.preventDefault();
+  colorPickerDragging = true;
+  currentColorData = {
+    scanner,
+    rChannel,
+    gChannel,
+    bChannel,
+    wChannel,
+    pad: event.currentTarget,
+  };
+
+  updateColorFromMouse(event);
+
+  document.addEventListener("mousemove", handleColorDrag);
+  document.addEventListener("mouseup", stopColorDrag);
+}
+
+function handleColorDrag(event) {
+  if (!colorPickerDragging || !currentColorData) return;
+  updateColorFromMouse(event);
+}
+
+function stopColorDrag() {
+  colorPickerDragging = false;
+  currentColorData = null;
+  document.removeEventListener("mousemove", handleColorDrag);
+  document.removeEventListener("mouseup", stopColorDrag);
+}
+
+function rgbToColorPickerPosition(r, g, b) {
+  // Convert RGB to HSV
+  const r1 = r / 255;
+  const g1 = g / 255;
+  const b1 = b / 255;
+
+  const max = Math.max(r1, g1, b1);
+  const min = Math.min(r1, g1, b1);
+  const delta = max - min;
+
+  let hue = 0;
+  if (delta !== 0) {
+    if (max === r1) hue = ((g1 - b1) / delta) % 6;
+    else if (max === g1) hue = (b1 - r1) / delta + 2;
+    else hue = (r1 - g1) / delta + 4;
+    hue *= 60;
+    if (hue < 0) hue += 360;
+  }
+
+  const value = max;
+
+  // Snap to the same 10x10 grid used for display and input
+  const gridSize = 10;
+  const xIndex = Math.round((hue / 360) * (gridSize - 1));
+  const yIndex = Math.round((1 - value) * (gridSize - 1));
+
+  return {
+    x: xIndex / (gridSize - 1),
+    y: yIndex / (gridSize - 1),
+  };
+}
+
+function updateScannerColorDisplay(
+  s,
+  rChannel,
+  gChannel,
+  bChannel,
+  wChannel,
+  r,
+  g,
+  b,
+  w,
+) {
+  const hexColor = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+
+  // Update the color picker pad background
+  const pad = document.querySelector(`.color-picker-pad[data-scanner="${s}"]`);
+  if (pad) {
+    pad.style.background = hexColor;
+    const preview = pad.querySelector(".color-preview");
+    if (preview) preview.style.background = hexColor;
+  }
+
+  // Update position indicator
+  const { x, y } = rgbToColorPickerPosition(r, g, b);
+  const posIndicator = document.getElementById(`color-position-${s}`);
+  if (posIndicator) {
+    posIndicator.style.left = `${x * 100}%`;
+    posIndicator.style.top = `${y * 100}%`;
+  }
+
+  // Update the label
+  const label = document.getElementById(`color-label-${s}`);
+  if (label) {
+    label.textContent = `R:${r} G:${g} B:${b}${wChannel >= 0 ? " W:" + w : ""}`;
+  }
+
+  updateSliderDisplay(s, rChannel, r, null);
+  updateSliderDisplay(s, gChannel, g, null);
+  updateSliderDisplay(s, bChannel, b, null);
+  if (wChannel >= 0) {
+    updateSliderDisplay(s, wChannel, w, null);
+  }
+}
+
+function updateColorFromMouse(event) {
+  if (!currentColorData || !proFileData) return;
+
+  const { scanner, rChannel, gChannel, bChannel, wChannel, pad } =
+    currentColorData;
+  const rect = pad.getBoundingClientRect();
+
+  let x = (event.clientX - rect.left) / rect.width;
+  let y = (event.clientY - rect.top) / rect.height;
+  x = Math.max(0, Math.min(1, x));
+  y = Math.max(0, Math.min(1, y));
+
+  // Snap to 10x10 grid (100 colors)
+  const gridSize = 10;
+  const xIndex = Math.round(x * (gridSize - 1));
+  const yIndex = Math.round(y * (gridSize - 1));
+  x = xIndex / (gridSize - 1);
+  y = yIndex / (gridSize - 1);
+
+  // Use HSV color space for better color picking
+  // x = hue (0-360), y = value/brightness (0-1), saturation = 1
+  const hue = x * 360;
+  const value = 1 - y;
+  const saturation = 1;
+
+  // Convert HSV to RGB
+  const c = value * saturation;
+  const x1 = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = value - c;
+
+  let r1, g1, b1;
+  if (hue < 60) {
+    r1 = c;
+    g1 = x1;
+    b1 = 0;
+  } else if (hue < 120) {
+    r1 = x1;
+    g1 = c;
+    b1 = 0;
+  } else if (hue < 180) {
+    r1 = 0;
+    g1 = c;
+    b1 = x1;
+  } else if (hue < 240) {
+    r1 = 0;
+    g1 = x1;
+    b1 = c;
+  } else if (hue < 300) {
+    r1 = x1;
+    g1 = 0;
+    b1 = c;
+  } else {
+    r1 = c;
+    g1 = 0;
+    b1 = x1;
+  }
+
+  const r = Math.round((r1 + m) * 255);
+  const g = Math.round((g1 + m) * 255);
+  const b = Math.round((b1 + m) * 255);
+  const w =
+    wChannel >= 0
+      ? proFileData[getSceneChannelOffset(currentSceneIndex, scanner, wChannel)]
+      : 0;
+
+  // Update data for primary scanner
+  proFileData[getSceneChannelOffset(currentSceneIndex, scanner, rChannel)] = r;
+  proFileData[getSceneChannelOffset(currentSceneIndex, scanner, gChannel)] = g;
+  proFileData[getSceneChannelOffset(currentSceneIndex, scanner, bChannel)] = b;
+
+  // Update display for primary scanner
+  updateScannerColorDisplay(
+    scanner,
+    rChannel,
+    gChannel,
+    bChannel,
+    wChannel,
+    r,
+    g,
+    b,
+    w,
+  );
+
+  // Sync to selected scanners
+  if (selectedScanners.size > 1 && selectedScanners.has(scanner)) {
+    selectedScanners.forEach((s) => {
+      if (s !== scanner) {
+        const sRGBW = getRGBWChannels(s);
+        if (sRGBW.red >= 0 && sRGBW.green >= 0 && sRGBW.blue >= 0) {
+          proFileData[getSceneChannelOffset(currentSceneIndex, s, sRGBW.red)] =
+            r;
+          proFileData[
+            getSceneChannelOffset(currentSceneIndex, s, sRGBW.green)
+          ] = g;
+          proFileData[getSceneChannelOffset(currentSceneIndex, s, sRGBW.blue)] =
+            b;
+          const sW =
+            sRGBW.white >= 0
+              ? proFileData[
+                  getSceneChannelOffset(currentSceneIndex, s, sRGBW.white)
+                ]
+              : 0;
+          updateScannerColorDisplay(
+            s,
+            sRGBW.red,
+            sRGBW.green,
+            sRGBW.blue,
+            sRGBW.white,
+            r,
+            g,
+            b,
+            sW,
+          );
+        }
+      }
+    });
+  }
+
+  updateSceneMetadata(currentSceneIndex);
+  clearError();
+}
+
+// --- Channel display setting ---
+
+function updateChannelDisplay(count) {
+  const num = parseInt(count);
+  if (isNaN(num) || num < 1 || num > 16) {
+    showError("Channel count must be between 1 and 16");
+    setTimeout(clearError, 2000);
+    return;
+  }
+  displayedChannels = num;
+  displayScene();
+}
+
+// --- Dimmer toggle ---
+
+function toggleDimmer(scanner) {
+  if (!proFileData) return;
+
+  const dimmerCh = getDimmerChannel(scanner);
+  if (dimmerCh < 0) {
+    showError(`⚠️ Scanner ${scanner + 1} has no dimmer channel configured`);
+    setTimeout(clearError, 2000);
+    return;
+  }
+
+  const currentValue =
+    proFileData[getSceneChannelOffset(currentSceneIndex, scanner, dimmerCh)];
+  const newValue = currentValue > 0 ? 0 : 255;
+
+  proFileData[getSceneChannelOffset(currentSceneIndex, scanner, dimmerCh)] =
+    newValue;
+
+  // Update display
+  updateSliderDisplay(scanner, dimmerCh, newValue, null);
+  updateDimmerIndicator(scanner, newValue);
+
+  updateSceneMetadata(currentSceneIndex);
+  clearError();
 }
