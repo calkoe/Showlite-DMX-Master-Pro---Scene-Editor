@@ -111,6 +111,14 @@ document.addEventListener("keydown", (event) => {
 
 // --- Navigation ---
 
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+}
+
 function jumpToScene(sceneIndex) {
   if (!proFileData) return;
   currentSceneIndex = sceneIndex;

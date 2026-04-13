@@ -247,10 +247,7 @@ function displayScene() {
       ? '<span class="empty-indicator">(Empty)</span>'
       : "";
     titleHtml = `
-      <span>Bank ${sceneData.bank} / Scene ${sceneData.sceneInBank} ${emptyIndicator}</span>
-      <span style="color: #888; font-size: 0.9em; margin-left: 10px;">
-          (Scene ${currentSceneIndex + 1} of ${TOTAL_SCENES})
-      </span>`;
+      <span>Bank ${sceneData.bank} / Scene ${sceneData.sceneInBank} ${emptyIndicator}</span>`;
 
     const copyToBankInput = document.getElementById("copyToBank");
     if (copyToBankInput) copyToBankInput.value = sceneData.bank;

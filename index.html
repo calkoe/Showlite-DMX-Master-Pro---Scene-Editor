@@ -37,6 +37,15 @@
               >
                 📂 Demo
               </button>
+              <button
+                class="toolbar-btn toolbar-section-fixed"
+                href="https://github.com/calkoe/Showlite-DMX-Master-Pro---Scene-Editor"
+                target="_blank"
+                rel="noopener"
+                title="GitHub Repository"
+              >
+                ⭐ GitHub
+              </button>
             </div>
             <div class="toolbar-sep"></div>
             <!-- EDIT -->
@@ -163,6 +172,13 @@
               >
                 🎬 Operator
               </button>
+              <button
+                class="toolbar-btn"
+                onclick="toggleFullscreen()"
+                title="Toggle Fullscreen"
+              >
+                ⛶ Fullscreen
+              </button>
             </div>
           </div>
         </div>
@@ -269,16 +285,17 @@
           </div>
         </div>
 
+        <input
+          type="file"
+          id="fileInput"
+          accept=".PRO,.pro"
+          style="display: none"
+        />
+
         <div class="scene-display" id="sceneDisplay">
           <div class="empty-scene">
             No scene loaded
             <br /><br />
-            <input
-              type="file"
-              id="fileInput"
-              accept=".PRO,.pro"
-              style="display: none"
-            />
             <button
               onclick="document.getElementById('fileInput').click()"
               style="
@@ -311,22 +328,6 @@
             </button>
           </div>
         </div>
-        <footer
-          style="
-            text-align: center;
-            padding: 16px 0 8px;
-            font-size: 0.75em;
-            color: #666;
-          "
-        >
-          <a
-            href="https://github.com/calkoe/Showlite-DMX-Master-Pro---Scene-Editor"
-            target="_blank"
-            rel="noopener"
-            style="color: #4a9eff; text-decoration: none"
-            >GitHub Repository</a
-          >
-        </footer>
       </div>
 
       <!-- AI Chat Panel (inline, pushes content) -->

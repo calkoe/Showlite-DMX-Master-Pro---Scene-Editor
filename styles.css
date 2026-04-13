@@ -42,9 +42,24 @@ body {
   padding: 3px 10px;
 }
 
+.toolbar-github {
+  text-decoration: none;
+  font-size: 0.75em;
+  color: #888;
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 3px 10px;
+}
+
+.toolbar-github:hover {
+  color: #4a9eff;
+}
+
 .toolbar-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
   flex-wrap: wrap;
   flex: 1;
@@ -60,6 +75,10 @@ body {
   border-radius: 4px;
   padding: 3px 6px;
   flex: 1;
+}
+
+.toolbar-section-fixed {
+  flex: 0 0 auto;
 }
 
 .toolbar-section-label {
