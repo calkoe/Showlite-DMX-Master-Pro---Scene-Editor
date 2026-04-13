@@ -12,7 +12,6 @@ The `.PRO` file format was fully reverse-engineered from raw EEPROM dumps. This 
 
 - **Lighting technicians** who want to prepare or edit scenes on a computer instead of programming on the hardware
 - **Hobbyists** using the Showlite DMX Master Pro USB who need more visibility into their programmed scenes
-- **Developers** interested in the undocumented EEPROM format of this controller family
 
 ---
 
