@@ -153,9 +153,9 @@ async function dmxSendFrame() {
   if (!dmxWriter || !dmxRunning || dmxSending) return;
   dmxSending = true;
   try {
-    // Use operator fade data if running, otherwise direct scene data
+    // Use operator overrides when panel is open (master dimmer, strobe, blackout etc.)
     const data =
-      typeof getOperatorDmxData === "function" && operatorRunning
+      typeof getOperatorDmxData === "function" && operatorPanelOpen
         ? getOperatorDmxData().slice()
         : getCurrentSceneDmxData().slice();
     if (dmxMode === DMX_MODE_RAW) {

@@ -1,7 +1,6 @@
 # Showlite DMX Master Pro USB — Scene Editor & Standalone Operator
 
 ![Screenshot 1](screenshot1.png)
-![Screenshot 2](screenshot2.png)
 
 **[Try it online](https://calkoe.github.io/Showlite-DMX-Master-Pro---Scene-Editor/)** — no installation required.
 
@@ -21,7 +20,7 @@ The `.PRO` file format was fully reverse-engineered from raw EEPROM dumps. This 
 
 ### Opening a File
 
-1. Open `viewer.html` in any modern browser (Chrome, Firefox, Edge, Safari)
+1. Open `index.html` in any modern browser (Chrome, Firefox, Edge, Safari)
 2. Click the file input and select a `.PRO` file from your Showlite controller
 3. The editor loads all 240 scenes (30 banks × 8 scenes)
 
@@ -188,15 +187,40 @@ Click the **📡 Raw RS485 / ENTTEC Pro** button to toggle between modes.
 
 ## Operator Mode
 
-The **Operator** auto-steps through scenes in the current bank with configurable timing and smooth DMX crossfades.
+The **Operator** provides a full live-performance control surface: auto-step through scenes with crossfade, quick bank switching, tap tempo, master dimmer, and strobe effects — all without modifying the underlying scene data.
 
-### Controls
+Click **"🎬 Operator"** in the toolbar to toggle the operator panel.
 
-Click **"🎬 Operator"** in the toolbar to toggle the operator panel. It displays inline with:
+### Bank Quick Select
 
-- **Step Time** (0.1–20s): Time between scene transitions
-- **Fade Time** (0.1–20s): Duration of the DMX crossfade between scenes. Automatically clamped to not exceed Step Time.
-- **Start / Stop** buttons and a status indicator showing the current bank/scene
+A 30-button bank grid (color-coded in groups of 5) lets you jump to any bank instantly:
+
+- **Left click** → permanent bank switch
+- **Right click (hold)** → temporary preview; releases back to the previous bank
+
+### Transport & Timing
+
+- **Start / Stop** — begin or halt the auto-step loop through scenes 1–8 of the current bank
+- **Step Time** (0.1–20s) — interval between scene transitions
+- **Fade Time** (0.1–20s) — DMX crossfade duration between scenes
+- **TAP** button — tap in the beat; averages up to 8 taps to set Step and Fade time together (fade = 50% of step). Resets after 3 seconds of inactivity.
+
+### Master Dimmer
+
+A 0–255 slider that scales all scanner dimmer channels proportionally. Enable it with the checkbox; when unchecked the dimmer override is bypassed.
+
+### Effect Buttons
+
+All effect buttons support two interaction modes:
+
+- **Left click** → toggle on/off (permanent)
+- **Right click (hold)** → active only while held (temporary)
+
+| Button            | Effect                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| **⬛ BLACKOUT**   | Forces all dimmer channels to 0 (highest priority)                                         |
+| **⚡ STROBE**     | All scanners flash together at 10 Hz (30% duty cycle)                                      |
+| **🎲 RND STROBE** | Random ~50% of scanners flash; the others stay off. Random selection changes every 200 ms. |
 
 ### Crossfade Behavior
 
@@ -207,7 +231,7 @@ Click **"🎬 Operator"** in the toolbar to toggle the operator panel. It displa
 
 ### DMX Output Integration
 
-When the operator is running and DMX output is active, the USB interface sends the interpolated fade values in real-time. This means connected fixtures smoothly transition between scenes.
+When the operator panel is open and DMX output is active, all operator overrides (master dimmer, blackout, strobe) are applied to the DMX stream in real-time. This means connected fixtures respond immediately to operator controls without modifying the saved scene data.
 
 ---
 
@@ -233,49 +257,61 @@ When the operator is running and DMX output is active, the USB interface sends t
 
 ---
 
-## MCP Server — AI Agent Integration
+## AI Lighting Agent
 
-The `mcp-server/` directory contains a **Model Context Protocol** server that lets AI agents (VS Code Copilot, Claude Desktop, etc.) read and write `.PRO` files directly on disk.
+The editor includes a built-in **AI lighting designer** powered by the OpenAI API. It can create complete light shows by programming all 8 scenes of a bank through natural language commands.
 
 ### Setup
 
-```bash
-cd mcp-server
-npm install
-```
+1. Click the **"🤖 AI Agent"** button in the toolbar to open the chat panel
+2. Enter your OpenAI API key when prompted (stored in browser localStorage)
+3. Describe the light show you want
 
-### Register with your AI client
+### Model Selection
 
-Add to your MCP client config (e.g. VS Code `settings.json` or Claude Desktop `claude_desktop_config.json`):
+Use the dropdown in the chat header to choose your preferred OpenAI model:
 
-```json
-{
-  "mcpServers": {
-    "showlite-pro": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcp-server/server.js"]
-    }
-  }
-}
-```
+- `gpt-4o` (default), `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `o4-mini`
 
-### Available Tools
+The selection is persisted across sessions.
 
-| Tool                 | Description                                                                      |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `load_file`          | Load a `.PRO` file into memory (auto-finds one in project root if no path given) |
-| `save_file`          | Save the in-memory data back to disk                                             |
-| `list_scenes`        | List all non-empty scenes in a bank or across all 30 banks                       |
-| `get_scene`          | Read all channel values for a scene with human-readable attribute names          |
-| `get_channel_config` | Show channel attribute mappings (PAN, TILT, RGB, etc.) for all scanners          |
-| `set_channel`        | Set a single DMX channel value (0-255) — auto-saves                              |
-| `set_color`          | Set RGB(W) + dimmer for a scanner — auto-saves                                   |
-| `set_position`       | Set pan/tilt in degrees (-90° to +90°) using calibration — auto-saves            |
-| `set_scanner_batch`  | Set multiple channels at once via a JSON map — auto-saves                        |
-| `copy_scanner`       | Copy all channels from one scanner to another — auto-saves                       |
-| `clear_scene`        | Zero out an entire scene — auto-saves                                            |
+### What It Can Do
 
-The server reuses the exact same binary-format code (`constants.js`, `pro-format.js`, `color-utils.js`) as the web editor — zero duplicated logic.
+- **Create full shows**: "Create a chill blue-purple ambient show" → programs all 8 scenes with color progressions, dimmer dynamics, and smooth loops
+- **Set colors**: "Make all scanners red" → sets RGB values across all scenes
+- **Position fixtures**: "Create a circular motion on scanner 1" → plans an 8-step pan/tilt trajectory
+- **Use calibration**: Reads color wheel and gobo wheel presets from Bank 30 before setting wheel channels
+- **Copy and arrange**: "Copy scene 1 to scenes 2-8" or "Copy this bank to bank 5"
+
+### Available AI Tools
+
+| Tool                 | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| `get_channel_config` | Read channel attribute mappings for all scanners             |
+| `get_wheel_presets`  | Read calibrated color/gobo wheel DMX values from Bank 30     |
+| `get_scene_info`     | Read all channel values for a scene                          |
+| `set_scene_batch`    | Set multiple scanners/channels in one scene (most efficient) |
+| `set_colors_batch`   | Set RGB(W) + dimmer for multiple scanners                    |
+| `set_position`       | Set pan/tilt in degrees using calibration                    |
+| `set_channel`        | Set a single channel value                                   |
+| `clear_scene`        | Zero all channels in a scene                                 |
+| `jump_to_scene`      | Navigate the editor to a scene                               |
+| `copy_scene`         | Copy a scene within the current bank                         |
+| `copy_bank_to`       | Copy the current bank to another bank                        |
+
+### Design Intelligence
+
+The AI is instructed to:
+
+- Apply changes to **all 8 scenes** by default (the whole bank) unless a specific scene is requested
+- Ensure **smooth loops** — Scene 8 transitions cleanly back to Scene 1
+- Plan **motion patterns** across all 8 frames before setting values
+- Use **calibrated preset values** for color/gobo wheels instead of guessing
+- Keep the **dimmer above 0** so lights are actually visible
+
+### Rate Limiting
+
+The agent auto-retries on OpenAI rate limit errors (HTTP 429) up to 3 times with parsed wait times. A tool call counter in the chat shows progress during large operations.
 
 ---
 
@@ -383,12 +419,8 @@ The first 20 bytes of block 255 contain a repeating `0x55 0xAA` pattern. The con
 
 ### Further Format Details
 
-See [PRO_FILE_FORMAT.md](PRO_FILE_FORMAT.md) for the complete reverse-engineered specification, including scene metadata field analysis, chase/program data structure, controller configuration block, and second EEPROM bank documentation.
-
 ---
 
 ## License
 
 This project is based on independent reverse engineering of the Showlite DMX Master Pro USB EEPROM format. It is not affiliated with or endorsed by the manufacturer.
-
-# Showlite-DMX-Master-Pro---Scene-Editor

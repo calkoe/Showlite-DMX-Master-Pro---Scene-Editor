@@ -46,7 +46,7 @@ function loadFileData(data, name) {
   clearError();
 
   controlsBar.style.display = "";
-  copyControls.style.display = "grid";
+  copyControls.style.display = "";
 
   displayScene();
 }

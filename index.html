@@ -7,199 +7,390 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="container">
-      <h1>🎭 Showlite DMX Master Pro - Scene Editor</h1>
-
-      <div class="controls" id="controlsBar" style="display: none">
-        <div class="top-controls">
-          <div class="action-buttons" id="actionButtons">
-            <button id="dmxPlayBtn" class="dmx-btn" onclick="toggleDmxOutput()">
-              ▶️ DMX Output
-            </button>
-            <button
-              id="dmxModeBtn"
-              class="dmx-mode-btn"
-              onclick="toggleDmxMode()"
-              title="Mode: Raw USB-to-RS485 (250kbaud). Click to switch to ENTTEC Pro."
-            >
-              📡 Raw RS485
-            </button>
-            <button onclick="jumpToChannelConfig()">
-              ⚙️ Enter Channel Config
-            </button>
-            <button onclick="jumpToCalibration()">
-              📐 Enter Calibration Scenes
-            </button>
-            <button onclick="clearScene()">🗑️ Clear this Scene</button>
-            <button onclick="clearBank()">🗑️ Clear this Bank</button>
-            <button onclick="downloadFile()">💾 Download Modified .PRO</button>
-            <button
-              id="operatorToggleBtn"
-              class="operator-toggle-btn"
-              onclick="toggleOperatorPanel()"
-            >
-              🎬 Operator
-            </button>
-            <div
-              class="channel-display-control"
-              style="
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                margin-left: 8px;
-              "
-            >
-              <label for="channelCount" style="font-size: 0.8em; color: #aaa"
-                >Channels:</label
+    <div class="app-layout" id="appLayout">
+      <div class="container">
+        <!-- Modern single-line toolbar -->
+        <div class="toolbar" id="toolbar">
+          <span class="toolbar-title">DMX Master Pro</span>
+          <div class="toolbar-actions" id="controlsBar" style="display: none">
+            <!-- FILE -->
+            <div class="toolbar-section">
+              <span class="toolbar-section-label">File</span>
+              <button
+                class="toolbar-btn"
+                onclick="document.getElementById('fileInput').click()"
+                title="Open .PRO file"
               >
-              <input
-                type="number"
-                id="channelCount"
-                min="1"
-                max="16"
-                value="9"
-                onchange="updateChannelDisplay(this.value)"
-                style="
-                  width: 50px;
-                  padding: 4px;
-                  background: #2a2a2a;
-                  color: #e0e0e0;
-                  border: 1px solid #4a4a4a;
-                  border-radius: 3px;
-                "
-              />
+                📁 Open
+              </button>
+              <button
+                class="toolbar-btn"
+                onclick="downloadFile()"
+                title="Download .PRO file"
+              >
+                💾 Save
+              </button>
+              <button
+                class="toolbar-btn"
+                onclick="loadDemo()"
+                title="Load demo file"
+              >
+                📂 Demo
+              </button>
+            </div>
+            <div class="toolbar-sep"></div>
+            <!-- EDIT -->
+            <div class="toolbar-section">
+              <span class="toolbar-section-label">Edit</span>
+              <button
+                class="toolbar-btn"
+                onclick="jumpToChannelConfig()"
+                title="Channel Configuration"
+              >
+                ⚙️ Config
+              </button>
+              <button
+                class="toolbar-btn"
+                onclick="jumpToCalibration()"
+                title="Calibration Scenes"
+              >
+                📐 Calibration
+              </button>
+              <button
+                class="toolbar-btn"
+                onclick="clearScene()"
+                title="Clear current scene"
+              >
+                🗑️ Scene
+              </button>
+              <button
+                class="toolbar-btn"
+                onclick="clearBank()"
+                title="Clear current bank"
+              >
+                🗑️ Bank
+              </button>
+              <div
+                class="toolbar-copy-bank"
+                id="copyControls"
+                style="display: none"
+              >
+                <button
+                  class="toolbar-btn"
+                  onclick="toggleCopyBankPopover()"
+                  title="Copy Bank"
+                  id="copyBankToggle"
+                >
+                  🏦 Copy Bank
+                </button>
+                <div
+                  class="copy-bank-popover"
+                  id="copyBankPopover"
+                  style="display: none"
+                >
+                  <label>From</label>
+                  <input
+                    type="number"
+                    id="copyFromBank"
+                    min="1"
+                    max="30"
+                    placeholder="#"
+                  />
+                  <label>To</label>
+                  <input
+                    type="number"
+                    id="copyToBank"
+                    min="1"
+                    max="30"
+                    placeholder="#"
+                  />
+                  <button
+                    class="popover-go"
+                    onclick="
+                      copyBank();
+                      toggleCopyBankPopover();
+                    "
+                  >
+                    Go
+                  </button>
+                </div>
+              </div>
+              <div class="channel-display-control">
+                <label for="channelCount">CH:</label>
+                <input
+                  type="number"
+                  id="channelCount"
+                  min="1"
+                  max="16"
+                  value="9"
+                  onchange="updateChannelDisplay(this.value)"
+                />
+              </div>
+              <button
+                id="aiChatToggleBtn"
+                class="toolbar-btn ai-btn"
+                onclick="toggleAiChat()"
+                title="AI Lighting Agent"
+              >
+                🤖 AI
+              </button>
+            </div>
+            <div class="toolbar-sep"></div>
+            <!-- LIVE -->
+            <div class="toolbar-section">
+              <span class="toolbar-section-label">Live</span>
+              <button
+                id="dmxPlayBtn"
+                class="toolbar-btn dmx-btn"
+                onclick="toggleDmxOutput()"
+                title="DMX Output"
+              >
+                ▶️ DMX
+              </button>
+              <button
+                id="dmxModeBtn"
+                class="toolbar-btn dmx-mode-btn"
+                onclick="toggleDmxMode()"
+                title="Toggle DMX mode"
+              >
+                📡 RS485
+              </button>
+              <button
+                id="operatorToggleBtn"
+                class="toolbar-btn operator-toggle-btn"
+                onclick="toggleOperatorPanel()"
+                title="Operator Mode"
+              >
+                🎬 Operator
+              </button>
             </div>
           </div>
         </div>
-        <div class="copy-controls" id="copyControls" style="display: none">
-          <div class="copy-row">
-            <span class="copy-label">🏦 Copy Bank</span>
-            <label>From:</label>
+
+        <div id="error"></div>
+
+        <div id="operatorPanel" class="operator-panel" style="display: none">
+          <!-- Banks -->
+          <div class="op-section">
+            <span class="op-section-label">Banks</span>
+            <div class="op-bank-grid" id="opBankGrid"></div>
+          </div>
+
+          <!-- Inline controls row -->
+          <div class="op-inline">
+            <button
+              id="operatorStartBtn"
+              class="op-transport-btn"
+              onclick="operatorStart()"
+            >
+              ▶ Start
+            </button>
+            <button
+              id="operatorStopBtn"
+              class="op-transport-btn"
+              onclick="operatorStop()"
+              disabled
+            >
+              ⏹ Stop
+            </button>
+            <span id="operatorStatus" class="operator-status">⏹ Stopped</span>
+
+            <span class="op-sep"></span>
+
+            <label>Step</label>
             <input
-              type="number"
-              id="copyFromBank"
-              min="1"
-              max="30"
-              placeholder="Bank #"
+              type="range"
+              id="operatorStepSlider"
+              min="0.1"
+              max="20"
+              step="0.1"
+              value="2.0"
+              oninput="
+                updateOperatorStepTime(this.value);
+                document.getElementById('operatorStepVal').textContent =
+                  parseFloat(this.value).toFixed(1) + 's';
+              "
             />
-            <label>To:</label>
+            <span id="operatorStepVal" class="op-val">2.0s</span>
+
+            <label>Fade</label>
             <input
-              type="number"
-              id="copyToBank"
-              min="1"
-              max="30"
-              placeholder="Bank #"
+              type="range"
+              id="operatorFadeSlider"
+              min="0.1"
+              max="20"
+              step="0.1"
+              value="1.0"
+              oninput="
+                updateOperatorFadeTime(this.value);
+                document.getElementById('operatorFadeVal').textContent =
+                  parseFloat(this.value).toFixed(1) + 's';
+              "
             />
-            <button onclick="copyBank()">Copy</button>
+            <span id="operatorFadeVal" class="op-val">1.0s</span>
+
+            <button id="opTapBtn" class="op-tap-btn" onclick="operatorTap()">
+              TAP
+            </button>
+
+            <span class="op-sep"></span>
+
+            <label class="op-checkbox-label">
+              <input
+                type="checkbox"
+                id="opDimmerEnable"
+                onchange="opToggleMasterDimmer(this.checked)"
+              />
+              Dimmer
+            </label>
+            <input
+              type="range"
+              id="opDimmerSlider"
+              min="0"
+              max="255"
+              value="255"
+              disabled
+              oninput="opSetMasterDimmer(this.value)"
+            />
+            <span id="opDimmerVal" class="op-val">255</span>
+
+            <span class="op-sep"></span>
+
+            <button id="opBlackoutBtn" class="op-fx-btn op-blackout">
+              ⬛ BLACKOUT
+            </button>
+            <button id="opStrobeBtn" class="op-fx-btn op-strobe">
+              ⚡ STROBE
+            </button>
+            <button id="opRandomBtn" class="op-fx-btn op-random">
+              🎲 RND STROBE
+            </button>
+            <span class="op-hint">Left = toggle · Right = hold</span>
           </div>
         </div>
-      </div>
 
-      <div id="error"></div>
-
-      <div id="operatorPanel" class="operator-panel" style="display: none">
-        <div class="operator-body">
-          <span class="operator-header">🎬 Operator</span>
-          <label>Step</label>
-          <input
-            type="range"
-            id="operatorStepSlider"
-            min="0.1"
-            max="20"
-            step="0.1"
-            value="2.0"
-            oninput="
-              updateOperatorStepTime(this.value);
-              document.getElementById('operatorStepVal').textContent =
-                parseFloat(this.value).toFixed(1) + 's';
-            "
-          />
-          <span id="operatorStepVal" class="operator-val">2.0s</span>
-          <label>Fade</label>
-          <input
-            type="range"
-            id="operatorFadeSlider"
-            min="0.1"
-            max="20"
-            step="0.1"
-            value="1.0"
-            oninput="
-              updateOperatorFadeTime(this.value);
-              document.getElementById('operatorFadeVal').textContent =
-                parseFloat(this.value).toFixed(1) + 's';
-            "
-          />
-          <span id="operatorFadeVal" class="operator-val">1.0s</span>
-          <button id="operatorStartBtn" onclick="operatorStart()">
-            ▶ Start
-          </button>
-          <button id="operatorStopBtn" onclick="operatorStop()" disabled>
-            ⏹ Stop
-          </button>
-          <span id="operatorStatus" class="operator-status">⏹ Stopped</span>
+        <div class="scene-display" id="sceneDisplay">
+          <div class="empty-scene">
+            No scene loaded
+            <br /><br />
+            <input
+              type="file"
+              id="fileInput"
+              accept=".PRO,.pro"
+              style="display: none"
+            />
+            <button
+              onclick="document.getElementById('fileInput').click()"
+              style="
+                padding: 10px 20px;
+                background: #3a3a3a;
+                color: #e0e0e0;
+                border: 1px solid #4a4a4a;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 1em;
+                margin-right: 8px;
+              "
+            >
+              📁 Upload Own File
+            </button>
+            <button
+              id="demoBtn"
+              onclick="loadDemo()"
+              style="
+                padding: 10px 20px;
+                background: #4a9eff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 1em;
+              "
+            >
+              📂 Load Demo File
+            </button>
+          </div>
         </div>
+        <footer
+          style="
+            text-align: center;
+            padding: 16px 0 8px;
+            font-size: 0.75em;
+            color: #666;
+          "
+        >
+          <a
+            href="https://github.com/calkoe/Showlite-DMX-Master-Pro---Scene-Editor"
+            target="_blank"
+            rel="noopener"
+            style="color: #4a9eff; text-decoration: none"
+            >GitHub Repository</a
+          >
+        </footer>
       </div>
 
-      <div class="scene-display" id="sceneDisplay">
-        <div class="empty-scene">
-          No scene loaded
-          <br /><br />
+      <!-- AI Chat Panel (inline, pushes content) -->
+      <div id="aiChatPanel" class="ai-chat-panel">
+        <div class="ai-chat-header">
+          <span class="ai-chat-title">🤖 AI Lighting Agent</span>
+          <div class="ai-chat-header-actions">
+            <select
+              id="aiModelSelect"
+              class="ai-model-select"
+              onchange="aiSetModel(this.value)"
+              title="AI Model"
+            ></select>
+            <button
+              class="ai-chat-key-btn"
+              onclick="aiRevertLastChange()"
+              title="Revert last AI change"
+            >
+              ↩
+            </button>
+            <button
+              class="ai-chat-key-btn"
+              onclick="aiResetConversation()"
+              title="Reset conversation"
+            >
+              🗑
+            </button>
+            <button
+              class="ai-chat-key-btn"
+              onclick="aiAgentChangeApiKey()"
+              title="Change API Key"
+            >
+              🔑
+            </button>
+            <button
+              class="ai-chat-close-btn"
+              onclick="toggleAiChat()"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="ai-chat-messages" id="aiChatMessages"></div>
+        <div class="ai-chat-input-bar">
           <input
-            type="file"
-            id="fileInput"
-            accept=".PRO,.pro"
-            style="display: none"
+            type="text"
+            id="aiChatInput"
+            class="ai-chat-input"
+            placeholder="Describe your light show..."
+            autocomplete="off"
+            onkeydown="
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                aiAgentSend();
+              }
+            "
           />
-          <button
-            onclick="document.getElementById('fileInput').click()"
-            style="
-              padding: 10px 20px;
-              background: #3a3a3a;
-              color: #e0e0e0;
-              border: 1px solid #4a4a4a;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 1em;
-              margin-right: 8px;
-            "
-          >
-            📁 Upload Own File
-          </button>
-          <button
-            id="demoBtn"
-            onclick="loadDemo()"
-            style="
-              padding: 10px 20px;
-              background: #4a9eff;
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 1em;
-            "
-          >
-            📂 Load Demo File
+          <button class="ai-chat-send-btn" onclick="aiAgentSend()" title="Send">
+            ➤
           </button>
         </div>
       </div>
     </div>
-
-    <footer
-      style="
-        text-align: center;
-        padding: 16px 0 8px;
-        font-size: 0.75em;
-        color: #666;
-      "
-    >
-      <a
-        href="https://github.com/calkoe/Showlite-DMX-Master-Pro---Scene-Editor"
-        target="_blank"
-        rel="noopener"
-        style="color: #4a9eff; text-decoration: none"
-        >GitHub Repository</a
-      >
-    </footer>
 
     <script src="constants.js"></script>
     <script src="pro-format.js"></script>
@@ -208,6 +399,7 @@
     <script src="interactions.js"></script>
     <script src="dmx-output.js"></script>
     <script src="operator.js"></script>
+    <script src="ai-agent.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
